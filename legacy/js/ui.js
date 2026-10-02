@@ -1,0 +1,320 @@
+/* Ozone Perfume — UI helpers: escaping, icons, money, toasts, modal/drawer, forms. */
+(function () {
+  const U = OZ.ui = {};
+
+  U.esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  U.$ = (sel, root = document) => root.querySelector(sel);
+  U.$$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+  U.debounce = (fn, ms = 250) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
+  U.reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ---------- icons (24px stroke set) ---------- */
+  const P = {
+    search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+    user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/>',
+    heart: '<path d="M12 20s-7.5-4.4-9.2-9.1C1.7 7.6 4 4.5 7.3 4.5c2 0 3.5 1.1 4.7 2.7 1.2-1.6 2.7-2.7 4.7-2.7 3.3 0 5.6 3.1 4.5 6.4C19.5 15.6 12 20 12 20z"/>',
+    bag: '<path d="M5 8h14l-1 12H6L5 8z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/>',
+    close: '<path d="M6 6l12 12M18 6 6 18"/>',
+    menu: '<path d="M3 6h18M3 12h18M3 18h18"/>',
+    chevDown: '<path d="m6 9 6 6 6-6"/>',
+    chevLeft: '<path d="m15 18-6-6 6-6"/>',
+    chevRight: '<path d="m9 6 6 6-6 6"/>',
+    arrowRight: '<path d="M5 12h14M13 6l6 6-6 6"/>',
+    arrowUp: '<path d="M12 19V5M6 11l6-6 6 6"/>',
+    plus: '<path d="M12 5v14M5 12h14"/>',
+    minus: '<path d="M5 12h14"/>',
+    trash: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>',
+    gift: '<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M5 12v8h14v-8M12 8v12M12 8S10.5 3.5 8 4.2C6 4.8 7 8 12 8zm0 0s1.5-4.5 4-3.8C18 4.8 17 8 12 8z"/>',
+    truck: '<path d="M2 6h12v10H2zM14 10h4l3 3v3h-7z"/><circle cx="6" cy="18" r="2"/><circle cx="17" cy="18" r="2"/>',
+    shield: '<path d="M12 3 4 6v6c0 4.5 3.4 8.3 8 9 4.6-.7 8-4.5 8-9V6l-8-3z"/><path d="m9 12 2 2 4-4"/>',
+    percent: '<path d="M19 5 5 19"/><circle cx="7" cy="7" r="2.5"/><circle cx="17" cy="17" r="2.5"/>',
+    clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+    phone: '<path d="M5 3h4l2 5-2.5 1.5a11 11 0 0 0 6 6L16 13l5 2v4a2 2 0 0 1-2 2A17 17 0 0 1 3 5a2 2 0 0 1 2-2z"/>',
+    mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>',
+    pin: '<path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/>',
+    check: '<path d="m5 12 5 5L20 7"/>',
+    alert: '<circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 16.5v.5"/>',
+    info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/>',
+    edit: '<path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="m13.5 6.5 4 4"/>',
+    calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+    bell: '<path d="M6 16V11a6 6 0 1 1 12 0v5l2 2H4l2-2zM10 21h4"/>',
+    lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+    globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18"/>',
+    box: '<path d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5v-9z"/><path d="M3 7.5 12 12l9-4.5M12 12v9"/>',
+    refresh: '<path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/>',
+    filter: '<path d="M4 5h16l-6 7v6l-4 2v-8L4 5z"/>',
+    share: '<circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="m8.2 10.8 7.6-3.6M8.2 13.2l7.6 3.6"/>',
+    eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+    eyeOff: '<path d="M3 3l18 18M10.6 5.1A10 10 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4M6.6 6.6C3.7 8.4 2 12 2 12s3.5 7 10 7c1.8 0 3.3-.5 4.6-1.2M9.9 9.9a3 3 0 0 0 4.2 4.2"/>',
+    logout: '<path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h11"/>',
+    settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-2.9-1.2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.7 1.7 0 0 0 3.1 14H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.2-2.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.7 1.7 0 0 0 10 3.1V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 2.9 1.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0 1.2 2.9h.1a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+    home: '<path d="M3 11 12 4l9 7M5 10v10h14V10"/>',
+    sparkle: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8"/>',
+    flame: '<path d="M12 21c-4 0-7-2.8-7-6.5 0-3 2-5 3.5-6.5.3 2 1.5 3 2.5 3.5C11 8 12 5 14.5 3c.5 3.5 4.5 5.5 4.5 11.5 0 3.7-3 6.5-7 6.5z"/>',
+    play: '<path d="M7 5v14l12-7L7 5z"/>',
+    pause: '<path d="M8 5v14M16 5v14"/>',
+    card: '<rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="M2.5 10h19M6 15h4"/>',
+    crypto: '<circle cx="12" cy="12" r="9"/><path d="M9 7.5h4.5a2.2 2.2 0 0 1 0 4.5H9V7.5zm0 4.5h5a2.2 2.2 0 0 1 0 4.5H9V12zM10.5 6v1.5M10.5 16.5V18M13 6v1.5M13 16.5V18"/>',
+    copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/>',
+    app: '<rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M11 18.5h2"/>',
+    quiet: '<path d="M4 9h4l5-4v14l-5-4H4V9zM17 9l4 6M21 9l-4 6"/>',
+    timer: '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/>',
+    coverage: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',
+    tank: '<path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/>',
+    hvac: '<path d="M3 8h11a3 3 0 1 0-3-3M3 12h15a3 3 0 1 1-3 3M3 16h7"/>',
+    battery: '<rect x="2.5" y="7" width="17" height="10" rx="2"/><path d="M21.5 11v2M6 10v4M9.5 10v4"/>',
+    warranty: '<path d="M12 3 4 6v6c0 4.5 3.4 8.3 8 9 4.6-.7 8-4.5 8-9V6l-8-3z"/><path d="m9 12 2 2 4-4"/>',
+    energy: '<path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z"/>',
+    led: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
+    leaf: '<path d="M5 19c0-9 6-14 15-14 0 9-5 15-14 15"/><path d="M5 19 13 11"/>',
+    plant: '<path d="M5 19c0-9 6-14 15-14 0 9-5 15-14 15"/><path d="M5 19 13 11"/>',
+    waterless: '<path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/><path d="M4 4l16 16"/>',
+    bluetooth: '<path d="m7 7 10 10-5 4V3l5 4L7 17"/>',
+    wallMount: '<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M3 3v18M9 12h6"/>',
+    building: '<path d="M4 21V5l8-2v18M12 8h8v13M8 8h.01M8 12h.01M8 16h.01M16 12h.01M16 16h.01M2 21h20"/>',
+    briefcase: '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5h6v2M3 12h18"/>',
+    star: '<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3 6.4 20.2l1.1-6.2L3 9.6l6.2-.9L12 3z"/>',
+    whatsapp: '<path d="M4 20l1.3-3.9A8 8 0 1 1 8 19l-4 1z"/><path d="M9 9.5c0 3 2.5 5.5 5.5 5.5l1.3-1.3-2-1-.8.8a4 4 0 0 1-2.5-2.5l.8-.8-1-2L9 9.5z"/>',
+    instagram: '<rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><path d="M17.5 6.5h.01"/>',
+    facebook: '<path d="M14 8h3V4h-3a4 4 0 0 0-4 4v3H7v4h3v6h4v-6h3l1-4h-4V8z"/>',
+    tiktok: '<path d="M14 3v11.5a3.5 3.5 0 1 1-3.5-3.5M14 3c.5 3 2.5 5 6 5"/>',
+    grid: '<rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><rect x="13" y="13" width="7" height="7" rx="1"/>',
+    expand: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',
+    dashboard: '<rect x="3" y="3" width="8" height="10" rx="1"/><rect x="13" y="3" width="8" height="6" rx="1"/><rect x="3" y="15" width="8" height="6" rx="1"/><rect x="13" y="11" width="8" height="10" rx="1"/>',
+    tag: '<path d="M3 12V4h8l10 10-8 8L3 12z"/><circle cx="7.5" cy="7.5" r="1.5"/>',
+    users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6M16 4.5a3.5 3.5 0 0 1 0 7M18 14c2.2.6 3.5 2.8 3.5 6"/>',
+    layers: '<path d="m12 3 9 5-9 5-9-5 9-5z"/><path d="m3 13 9 5 9-5"/>',
+    message: '<path d="M4 5h16v11H9l-5 4V5z"/>',
+    upload: '<path d="M12 16V4M6 10l6-6 6 6M4 20h16"/>'
+  };
+  U.icon = (name, cls = '') => `<svg class="ic ${cls}" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${P[name] || ''}</svg>`;
+
+  /* ---------- money / dates ---------- */
+  U.money = (aed, opts = {}) => {
+    const cur = opts.currency || OZ.store.session.currency;
+    const loc = OZ.LANGS[OZ.store.session.lang].locale;
+    const v = aed * OZ.CURRENCIES[cur].rate;
+    try {
+      return new Intl.NumberFormat(loc, { style: 'currency', currency: cur, currencyDisplay: 'code', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v).replace(/ /g, ' ');
+    } catch (e) { return cur + ' ' + v.toFixed(2); }
+  };
+  U.date = (d, opts = { day: 'numeric', month: 'short', year: 'numeric' }) => {
+    try { return new Intl.DateTimeFormat(OZ.LANGS[OZ.store.session.lang].locale, opts).format(new Date(d)); } catch (e) { return String(d).slice(0, 10); }
+  };
+
+  U.stars = (rating, cls = '') => {
+    const pct = Math.max(0, Math.min(100, rating / 5 * 100));
+    const row = U.icon('star').repeat(5);
+    return `<span class="stars ${cls}" role="img" aria-label="${U.esc(OZ.t('a11y.rating', { n: rating }))}"><span class="stars-bg">${row}</span><span class="stars-fg" style="width:${pct}%">${row}</span></span>`;
+  };
+
+  /* ---------- live region + toasts ---------- */
+  U.announce = msg => { const el = U.$('#sr-live'); if (el) { el.textContent = ''; setTimeout(() => { el.textContent = msg; }, 30); } };
+
+  U.toast = (msg, type = 'success', action) => {
+    const host = U.$('#toasts');
+    const el = document.createElement('div');
+    el.className = `toast toast-${type}`;
+    el.setAttribute('role', type === 'error' ? 'alert' : 'status');
+    const ic = type === 'error' ? 'alert' : type === 'info' ? 'info' : 'check';
+    el.innerHTML = `<span class="toast-ic">${U.icon(ic)}</span><span class="toast-msg">${U.esc(msg)}</span>${action ? `<a class="toast-act" href="${action.href || '#'}">${U.esc(action.label)}</a>` : ''}<button class="toast-x" aria-label="${U.esc(OZ.t('a11y.dismiss'))}">${U.icon('close')}</button>`;
+    host.appendChild(el);
+    requestAnimationFrame(() => el.classList.add('in'));
+    const remove = () => { el.classList.remove('in'); setTimeout(() => el.remove(), 300); };
+    el.querySelector('.toast-x').onclick = remove;
+    if (action && action.onClick) el.querySelector('.toast-act').onclick = e => { e.preventDefault(); action.onClick(); remove(); };
+    setTimeout(remove, type === 'error' ? 7000 : 4200);
+  };
+
+  U.errorText = err => {
+    const code = (err && err.code) || 'unknown';
+    const key = 'err.' + code;
+    const txt = OZ.t(key, err || {});
+    return txt === key ? OZ.t('err.unknown') : txt;
+  };
+
+  /* ---------- focus trap for overlays ---------- */
+  const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type=hidden]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+  function trap(container, e) {
+    if (e.key !== 'Tab') return;
+    const f = U.$$(FOCUSABLE, container).filter(el => el.offsetParent !== null);
+    if (!f.length) return;
+    const first = f[0], last = f[f.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  }
+
+  const stack = [];
+  function lockScroll() { document.documentElement.classList.toggle('scroll-locked', stack.length > 0); }
+
+  /* Generic overlay: kind = 'modal' | 'drawer-end' | 'drawer-start' */
+  U.overlay = function ({ kind = 'modal', title, body, size = '', onMount, onClose, labelledBy, className = '' }) {
+    const opener = document.activeElement;
+    const wrap = document.createElement('div');
+    wrap.className = `ov ov-${kind} ${className}`;
+    const tid = 'ov-t-' + Math.random().toString(36).slice(2, 7);
+    wrap.innerHTML = `<div class="ov-backdrop" data-ov-close></div>
+      <div class="ov-panel ${size}" role="dialog" aria-modal="true" aria-labelledby="${labelledBy || tid}" tabindex="-1">
+        ${title != null ? `<header class="ov-head"><h2 id="${tid}" class="ov-title">${title}</h2><button class="icon-btn ov-x" data-ov-close aria-label="${U.esc(OZ.t('a11y.close'))}">${U.icon('close')}</button></header>` : ''}
+        <div class="ov-body">${body || ''}</div>
+      </div>`;
+    document.body.appendChild(wrap);
+    const panel = wrap.querySelector('.ov-panel');
+    const api = {
+      el: wrap, panel, body: wrap.querySelector('.ov-body'),
+      close() {
+        if (!wrap.isConnected) return;
+        wrap.classList.remove('in');
+        const i = stack.indexOf(api); if (i >= 0) stack.splice(i, 1);
+        lockScroll();
+        setTimeout(() => wrap.remove(), U.reducedMotion() ? 0 : 320);
+        document.removeEventListener('keydown', onKey);
+        onClose && onClose();
+        if (opener && opener.focus && document.contains(opener)) opener.focus();
+      },
+      setBody(html) { api.body.innerHTML = html; }
+    };
+    function onKey(e) {
+      if (stack[stack.length - 1] !== api) return;
+      if (e.key === 'Escape') { e.preventDefault(); api.close(); }
+      trap(panel, e);
+    }
+    wrap.addEventListener('click', e => { if (e.target.closest('[data-ov-close]')) api.close(); });
+    document.addEventListener('keydown', onKey);
+    stack.push(api); lockScroll();
+    requestAnimationFrame(() => {
+      wrap.classList.add('in');
+      const auto = panel.querySelector('[autofocus]') || panel.querySelector('.ov-body ' + FOCUSABLE) || panel;
+      setTimeout(() => auto.focus({ preventScroll: true }), 60);
+    });
+    onMount && onMount(api);
+    return api;
+  };
+  U.closeAllOverlays = () => stack.slice().forEach(o => o.close());
+
+  U.confirm = (message, { confirmLabel, danger = true } = {}) => new Promise(resolve => {
+    let decided = false;
+    const ov = U.overlay({
+      title: U.esc(OZ.t('common.areYouSure')), size: 'sm',
+      body: `<p class="muted">${U.esc(message)}</p><div class="btn-row end"><button class="btn btn-ghost" data-no>${U.esc(OZ.t('common.cancel'))}</button><button class="btn ${danger ? 'btn-danger' : 'btn-primary'}" data-yes>${U.esc(confirmLabel || OZ.t('common.confirm'))}</button></div>`,
+      onClose: () => { if (!decided) resolve(false); }
+    });
+    ov.body.querySelector('[data-no]').onclick = () => { decided = true; resolve(false); ov.close(); };
+    ov.body.querySelector('[data-yes]').onclick = () => { decided = true; resolve(true); ov.close(); };
+  });
+
+  /* ---------- buttons ---------- */
+  U.busy = (btn, on, label) => {
+    if (!btn) return;
+    if (on) {
+      btn.dataset.label = btn.innerHTML;
+      btn.disabled = true; btn.setAttribute('aria-busy', 'true'); btn.classList.add('is-busy');
+      btn.innerHTML = `<span class="spinner" aria-hidden="true"></span><span>${U.esc(label || OZ.t('common.loading'))}</span>`;
+    } else {
+      btn.disabled = false; btn.removeAttribute('aria-busy'); btn.classList.remove('is-busy');
+      if (btn.dataset.label != null) btn.innerHTML = btn.dataset.label;
+    }
+  };
+
+  /* ---------- forms ---------- */
+  U.field = ({ name, label, type = 'text', value = '', required = false, autocomplete, placeholder = '', hint = '', options, rows, attrs = '', cls = '' }) => {
+    const id = 'f-' + name + '-' + Math.random().toString(36).slice(2, 6);
+    const req = required ? ' required aria-required="true"' : '';
+    const ac = autocomplete ? ` autocomplete="${autocomplete}"` : '';
+    const describe = `${id}-err${hint ? ' ' + id + '-hint' : ''}`;
+    let control;
+    if (options) {
+      control = `<select id="${id}" name="${name}"${req} aria-describedby="${describe}" ${attrs}>${options.map(o => `<option value="${U.esc(o.value)}"${String(o.value) === String(value) ? ' selected' : ''}${o.disabled ? ' disabled' : ''}>${U.esc(o.label)}</option>`).join('')}</select>`;
+    } else if (type === 'textarea') {
+      control = `<textarea id="${id}" name="${name}" rows="${rows || 4}"${req}${ac} placeholder="${U.esc(placeholder)}" aria-describedby="${describe}" ${attrs}>${U.esc(value)}</textarea>`;
+    } else {
+      control = `<input id="${id}" name="${name}" type="${type}" value="${U.esc(value)}"${req}${ac} placeholder="${U.esc(placeholder)}" aria-describedby="${describe}" ${attrs}>`;
+    }
+    const pwToggle = type === 'password' ? `<button type="button" class="pw-toggle" data-action="toggle-pw" aria-label="${U.esc(OZ.t('a11y.showPassword'))}" aria-pressed="false">${U.icon('eye')}</button>` : '';
+    return `<div class="field ${cls}${type === 'password' ? ' has-toggle' : ''}">
+      <label for="${id}">${U.esc(label)}${required ? '' : ` <span class="opt">${U.esc(OZ.t('common.optional'))}</span>`}</label>
+      <div class="control">${control}${pwToggle}</div>
+      ${hint ? `<p class="hint" id="${id}-hint">${hint}</p>` : ''}
+      <p class="err" id="${id}-err" role="alert"></p>
+    </div>`;
+  };
+
+  U.V = {
+    required: v => String(v || '').trim() ? '' : OZ.t('val.required'),
+    email: v => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(v || '').trim()) ? '' : OZ.t('val.email'),
+    password: v => (String(v).length >= 8 && /[A-Za-z]/.test(v) && /\d/.test(v)) ? '' : OZ.t('val.password'),
+    phone: v => !String(v || '').trim() || /^[+\d][\d\s()-]{6,}$/.test(String(v).trim()) ? '' : OZ.t('val.phone'),
+    min: n => v => String(v || '').trim().length >= n ? '' : OZ.t('val.min', { n }),
+    max: n => v => String(v || '').length <= n ? '' : OZ.t('val.max', { n }),
+    code: v => /^\d{6}$/.test(String(v || '').trim()) ? '' : OZ.t('val.code')
+  };
+
+  /* rules: { fieldName: [validator, ...] } → returns data or null (and paints errors) */
+  U.validate = (form, rules) => {
+    const data = Object.fromEntries(new FormData(form).entries());
+    U.$$('input[type=checkbox]', form).forEach(cb => { if (cb.name) data[cb.name] = cb.checked; });
+    let firstBad = null;
+    Object.entries(rules).forEach(([name, fns]) => {
+      const el = form.elements[name]; if (!el) return;
+      const msg = fns.map(fn => fn(data[name], data)).find(Boolean) || '';
+      U.setError(el, msg);
+      if (msg && !firstBad) firstBad = el;
+    });
+    if (firstBad) { firstBad.focus(); U.announce(OZ.t('val.fixErrors')); return null; }
+    return data;
+  };
+  U.setError = (el, msg) => {
+    const field = el.closest('.field'); if (!field) return;
+    field.classList.toggle('invalid', !!msg);
+    el.setAttribute('aria-invalid', msg ? 'true' : 'false');
+    const err = field.querySelector('.err'); if (err) err.textContent = msg || '';
+  };
+  U.formAlert = (form, msg, type = 'error') => {
+    let box = form.querySelector('.form-alert');
+    if (!box) { box = document.createElement('div'); form.prepend(box); }
+    box.className = `form-alert alert alert-${type}`;
+    box.setAttribute('role', type === 'error' ? 'alert' : 'status');
+    box.innerHTML = msg ? `${U.icon(type === 'error' ? 'alert' : 'check')}<span>${U.esc(msg)}</span>` : '';
+    box.hidden = !msg;
+  };
+
+  /* Clears an error as soon as the user edits the field */
+  document.addEventListener('input', e => {
+    const f = e.target.closest && e.target.closest('.field.invalid');
+    if (f) { f.classList.remove('invalid'); e.target.setAttribute('aria-invalid', 'false'); const er = f.querySelector('.err'); if (er) er.textContent = ''; }
+  });
+
+  /* Card helpers — used only for client-side format checks; card data never leaves the page in this prototype */
+  U.card = {
+    brand(num) {
+      const n = String(num).replace(/\D/g, '');
+      if (/^4/.test(n)) return 'visa';
+      if (/^(5[1-5]|2[2-7])/.test(n)) return 'mastercard';
+      if (/^3[47]/.test(n)) return 'amex';
+      if (/^(6011|65|64[4-9])/.test(n)) return 'discover';
+      if (/^35/.test(n)) return 'jcb';
+      if (/^(62|81)/.test(n)) return 'unionpay';
+      return n.length ? 'card' : '';
+    },
+    luhn(num) {
+      const n = String(num).replace(/\D/g, ''); if (n.length < 12 || n.length > 19) return false;
+      let sum = 0, dbl = false;
+      for (let i = n.length - 1; i >= 0; i--) { let d = +n[i]; if (dbl) { d *= 2; if (d > 9) d -= 9; } sum += d; dbl = !dbl; }
+      return sum % 10 === 0;
+    },
+    format(num) { const n = String(num).replace(/\D/g, '').slice(0, 19); return U.card.brand(n) === 'amex' ? n.replace(/^(\d{0,4})(\d{0,6})(\d{0,5}).*/, (m, a, b, c) => [a, b, c].filter(Boolean).join(' ')) : n.replace(/(\d{4})(?=\d)/g, '$1 '); },
+    expiryOk(v) {
+      const m = /^(\d{2})\s*\/\s*(\d{2})$/.exec(String(v).trim()); if (!m) return false;
+      const mo = +m[1], yr = 2000 + +m[2]; if (mo < 1 || mo > 12) return false;
+      const now = new Date(); return yr > now.getFullYear() || (yr === now.getFullYear() && mo >= now.getMonth() + 1);
+    }
+  };
+
+  /* ---------- image helper ---------- */
+  U.img = (key, alt, { size = 'sm', cls = '', eager = false, sizes = '' } = {}) => {
+    if (/^data:|^https?:|\//.test(key)) return `<img src="${U.esc(key)}" alt="${U.esc(alt)}" class="${cls}" ${eager ? 'fetchpriority="high"' : 'loading="lazy"'} decoding="async">`;
+    const small = `assets/img/${key}-sm.webp`, large = `assets/img/${key}.webp`;
+    const src = size === 'lg' ? large : small;
+    return `<img src="${src}" srcset="${small} 720w, ${large} 1600w" sizes="${sizes || (size === 'lg' ? '(max-width: 900px) 100vw, 55vw' : '(max-width: 600px) 50vw, 25vw')}" alt="${U.esc(alt)}" class="${cls}" ${eager ? 'fetchpriority="high"' : 'loading="lazy"'} decoding="async" width="720" height="480">`;
+  };
+})();
