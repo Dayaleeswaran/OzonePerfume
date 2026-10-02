@@ -156,6 +156,21 @@ function Shell() {
   </>);
 }
 
+/* Wait for the catalogue + session before rendering pages that read them synchronously */
+function Boot() {
+  useStore();
+  useEffect(() => { S.init(); }, []);
+  if (S.ready) return <Shell />;
+  if (S.loadError) return (
+    <div className="boot-error" role="alert">
+      <p className="logo-word">OZONE</p>
+      <p>{t(S.loadError.code === 'network' ? 'err.network' : 'err.unknown')}</p>
+      <button className="btn btn-primary" onClick={() => location.reload()}>{t('common.retry')}</button>
+    </div>
+  );
+  return <div className="boot-loading" aria-busy="true"><p className="logo-word">OZONE</p><Spinner big /></div>;
+}
+
 export default function App() {
-  return <UIProvider><Shell /></UIProvider>;
+  return <UIProvider><Boot /></UIProvider>;
 }

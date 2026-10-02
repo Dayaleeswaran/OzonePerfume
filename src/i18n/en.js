@@ -304,4 +304,25 @@ Object.assign(en, {
   'admin.line': 'Oil collection', 'admin.specs': 'Specifications', 'admin.specsHint': 'One per line, e.g. “Bottle capacity: 500 ml”. Known labels are translated automatically.'
 });
 
+/* Supabase backend & security update */
+Object.assign(en, {
+  'err.rate_limited': "Too many attempts. Please wait a few minutes and try again.",
+  'err.notConfirmed': "Please verify your email first — we’ve sent you a new code.",
+  'err.invalidInput': "Some details aren’t valid. Please check the form and try again.",
+  'err.weakPassword': "Choose a stronger password: at least 8 characters with letters and numbers.",
+  'err.samePassword': "Your new password must be different from the current one.",
+  'err.paymentsUnavailable': "Online payment isn’t available yet. Please contact us to complete your order.",
+  'err.orderNotFound': "We couldn’t find that order. It may have expired — please try again.",
+  'err.invalidState': "This order can no longer be paid. Please start checkout again.",
+  'err.storage': "Couldn’t save. Please try again.",
+  'status.awaiting_payment': "Awaiting payment",
+  'paystatus.cancelled': "Cancelled",
+  'pay.paidVia': "Paid via {provider}",
+  'pay.provider.test': "Test payment (sandbox)",
+  'pay.unavailable': "Online card payment is being set up. To order now, please contact us.",
+  'auth.checkSpam': "Can’t find it? Check your spam folder, or request a new code.",
+  'auth.createdCheckEmail': "Account created — we sent a verification code to {email}.",
+  'admin.paymentsNote': "No card data is ever stored. Payments are processed by the payment provider; only its reference is kept here."
+});
+
 export default en;

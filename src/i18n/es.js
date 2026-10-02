@@ -304,4 +304,25 @@ Object.assign(es, {
   'admin.line': 'Colección de aceites', 'admin.specs': 'Especificaciones', 'admin.specsHint': 'Una por línea, p. ej. “Bottle capacity: 500 ml”. Las etiquetas conocidas se traducen automáticamente.'
 });
 
+/* Supabase backend & security update */
+Object.assign(es, {
+  'err.rate_limited': "Demasiados intentos. Espera unos minutos e inténtalo de nuevo.",
+  'err.notConfirmed': "Primero verifica tu correo: te hemos enviado un nuevo código.",
+  'err.invalidInput': "Algunos datos no son válidos. Revisa el formulario e inténtalo de nuevo.",
+  'err.weakPassword': "Elige una contraseña más segura: al menos 8 caracteres con letras y números.",
+  'err.samePassword': "La nueva contraseña debe ser distinta de la actual.",
+  'err.paymentsUnavailable': "El pago en línea aún no está disponible. Contáctanos para completar tu pedido.",
+  'err.orderNotFound': "No encontramos ese pedido. Puede haber caducado; inténtalo de nuevo.",
+  'err.invalidState': "Este pedido ya no se puede pagar. Vuelve a iniciar el pago.",
+  'err.storage': "No se pudo guardar. Inténtalo de nuevo.",
+  'status.awaiting_payment': "Pendiente de pago",
+  'paystatus.cancelled': "Cancelado",
+  'pay.paidVia': "Pagado con {provider}",
+  'pay.provider.test': "Pago de prueba (sandbox)",
+  'pay.unavailable': "Estamos configurando el pago con tarjeta. Para pedir ahora, contáctanos.",
+  'auth.checkSpam': "¿No lo encuentras? Revisa la carpeta de spam o solicita un código nuevo.",
+  'auth.createdCheckEmail': "Cuenta creada: enviamos un código de verificación a {email}.",
+  'admin.paymentsNote': "Nunca se guardan datos de tarjeta. Los pagos los procesa el proveedor; aquí solo se guarda su referencia."
+});
+
 export default es;

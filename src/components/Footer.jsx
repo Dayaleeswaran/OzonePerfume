@@ -4,7 +4,7 @@ import { PayMarks } from './common.jsx';
 import { Button } from './ui.jsx';
 import { Logo, LocaleControls } from './Header.jsx';
 import { t } from '../lib/i18n.js';
-import { api } from '../lib/store.js';
+import { S } from '../lib/store.js';
 import { V } from '../lib/validate.js';
 import { errorText } from '../lib/format.js';
 import { BRAND } from '../data/catalog.js';
@@ -17,7 +17,7 @@ function Newsletter() {
     const bad = V.email(input.value);
     if (bad) { setState({ busy: false, msg: t('val.email'), ok: false, invalid: true }); input.focus(); return; }
     setState(s => ({ ...s, busy: true }));
-    api(() => true, 700).then(() => { input.value = ''; setState({ busy: false, msg: t('footer.subscribed'), ok: true, invalid: false }); })
+    S.subscribe(input.value.trim()).then(() => { input.value = ''; setState({ busy: false, msg: t('footer.subscribed'), ok: true, invalid: false }); })
       .catch(err => setState({ busy: false, msg: errorText(err), ok: false, invalid: false }));
   };
   return (

@@ -1647,3 +1647,7 @@ body.mode-bare[data-route="admin"] { background: var(--bg-soft); }
   .mega-wrap { display: none; }
 }
 .page-loading { min-height: 60vh; display: grid; place-items: center; }
+
+/* ---------- boot (loading catalogue + session from the server) ---------- */
+.boot-loading, .boot-error { min-height: 100vh; display: grid; place-content: center; justify-items: center; gap: 18px; text-align: center; padding: 24px; background: var(--bg, #0b0b0b); color: var(--ink, inherit); }
+.boot-loading .logo-word, .boot-error .logo-word { font-size: 28px; letter-spacing: .35em; }

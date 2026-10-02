@@ -11,7 +11,6 @@ import { money, errorText } from '../lib/format.js';
 import { V, card } from '../lib/validate.js';
 import { useForm } from '../lib/useForm.js';
 import { navigate, useTitle } from '../lib/router.js';
-import { CRYPTO } from '../data/catalog.js';
 
 const STEPS = ['info', 'shipping', 'payment', 'done'];
 const COUNTRIES = ['AE', 'SA', 'OM', 'QA', 'BH', 'KW', 'GB', 'US', 'ES', 'OTHER'];
@@ -87,8 +86,8 @@ function InfoStep() {
     ck.set({ contact: { email: d.email.trim(), newsletter: !!d.newsletter, createAccount: create } });
     if (!create) { navigate('#/checkout/shipping'); return; }
     setBusy(true);
-    S.register({ email: d.email, password: d.password, name: '' }).then(res => {
-      ui.toast(t('auth.createdVerify', { code: res.code }), 'success');
+    S.register({ email: d.email, password: d.password, name: '' }).then(() => {
+      ui.toast(t('auth.createdCheckEmail', { email: d.email }), 'success');
       navigate('#/checkout/shipping');
     }).catch(err => { setBusy(false); f.setAlert({ type: 'error', msg: err.code === 'exists' ? t('err.existsCheckout') : errorText(err) }); });
   };
@@ -166,87 +165,49 @@ function ShippingStep({ onMethod }) {
   );
 }
 
-/* Decorative QR-style pattern derived from the address (demo only — not scannable) */
-function QrArt({ seed }) {
-  let h = 7; const cells = [];
-  for (let i = 0; i < 21 * 21; i++) { h = (h * 31 + seed.charCodeAt(i % seed.length)) % 9973; cells.push(h % 3 === 0); }
-  const inFinder = (x, y) => (x < 8 && y < 8) || (x > 12 && y < 8) || (x < 8 && y > 12);
-  const finder = (x, y) => <g key={`${x}${y}`}><rect x={x} y={y} width="7" height="7" fill="none" stroke="currentColor" /><rect x={x + 2} y={y + 2} width="3" height="3" /></g>;
-  const rects = [];
-  for (let y = 0; y < 21; y++) for (let x = 0; x < 21; x++) if (!inFinder(x, y) && cells[y * 21 + x]) rects.push(<rect key={`${x}-${y}`} x={x} y={y} width="1" height="1" />);
-  return <svg viewBox="-1 -1 23 23" fill="currentColor">{finder(0.5, 0.5)}{finder(13.5, 0.5)}{finder(0.5, 13.5)}{rects}</svg>;
-}
+/* Which payment integration is live. 'test' = the sandbox Edge Function (the server must also have
+   TEST_PAYMENTS_ENABLED=true). Until the real gateway is connected, anything else disables paying. */
+const PROVIDER = import.meta.env.VITE_PAYMENT_PROVIDER || 'none';
 
-/* Closes the crypto quote once its timer runs out */
-function ExpireWatch({ left, outcome, close }) {
-  useEffect(() => { if (left <= 0 && !outcome.current) { outcome.current = 'expired'; close(); } }, [left, outcome, close]);
-  return null;
-}
-
-function CryptoModal({ coin, onClose, onSent, onCancel }) {
-  const ui = useUI();
-  const c = CRYPTO[coin], tt = S.totals({ shippingMethod: ck.get().shippingMethod });
-  const amt = (tt.total / c.aedPerCoin).toFixed(coin === 'USDT' ? 2 : 6);
-  const [left, setLeft] = useState(15 * 60);
-  const outcome = useRef(null);
-  useEffect(() => { const h = setInterval(() => setLeft(l => l - 1), 1000); return () => clearInterval(h); }, []);
-  return (
-    <Overlay title={<><Icon name="crypto" /> {t('pay.cryptoTitle', { coin })}</>} size="md" className="crypto-ov" onClose={() => { const o = outcome.current; onClose(); if (o === 'sent') onSent(); else onCancel(o === 'expired' ? t('pay.cryptoExpired') : undefined); }}>
-      {close => {
-        return (<>
-          <ExpireWatch left={left} outcome={outcome} close={close} />
-          <div className="crypto-pay">
-            <div className="qr" aria-hidden="true"><QrArt seed={c.address} /></div>
-            <div className="crypto-det">
-              <p className="muted small">{t('pay.sendExactly')}</p>
-              <p className="c-amt" dir="ltr">{amt} {coin}</p>
-              <p className="muted small">{t('pay.network')}: <strong>{c.network}</strong></p>
-              <label className="muted small" htmlFor="c-addr">{t('pay.toAddress')}</label>
-              <div className="copy-row"><input id="c-addr" readOnly value={c.address} dir="ltr" onFocus={e => e.target.select()} />
-                <button className="btn btn-outline btn-sm" onClick={() => (navigator.clipboard ? navigator.clipboard.writeText(c.address) : Promise.reject()).then(() => ui.toast(t('common.copied'), 'info')).catch(() => {})}><Icon name="copy" /> {t('common.copy')}</button></div>
-              <p className="c-timer"><Icon name="clock" /> <span>{String(Math.floor(Math.max(0, left) / 60)).padStart(2, '0')}:{String(Math.max(0, left) % 60).padStart(2, '0')}</span> {t('pay.cryptoExpires')}</p>
-              <Alert type="info">{t('pay.cryptoDemo')}</Alert>
-            </div>
-          </div>
-          <div className="btn-row end"><button className="btn btn-ghost" onClick={() => { outcome.current = 'cancel'; close(); }}>{t('pay.cancel')}</button><button className="btn btn-teal" onClick={() => { outcome.current = 'sent'; close(); }}>{t('pay.cryptoSent')}</button></div>
-        </>);
-      }}
-    </Overlay>
-  );
-}
+/* Fingerprint of what the pending order was created from; if anything changes we start a new order */
+const orderSig = (st, email) => JSON.stringify([S.cart().map(l => [l.productId, l.sizeId, l.qty, l.gift || null]), S.coupon() && S.coupon().code, st.shipping, st.shippingMethod || 'standard', email]);
 
 function PaymentStep() {
   const f = useForm();
   const st = ck.get();
   const u = S.user();
-  const [pm, setPm] = useState('card');
-  const [coin, setCoin] = useState('USDT');
   const [billingSame, setBillingSame] = useState(true);
   const [brand, setBrand] = useState('');
-  const [flow, setFlow] = useState(null); // {stage:'processing'|'submitting'|'result'|'crypto', ...}
+  const [flow, setFlow] = useState(null); // {stage:'processing'|'result', kind, reason, outcome}
   const cardRef = useRef(null);
-  const timer = useRef(null);
   const tt = S.totals({ shippingMethod: st.shippingMethod });
   const email = u ? u.email : st.contact.email;
-  const cryptoOn = S.settings().cryptoEnabled;
-  useEffect(() => () => clearTimeout(timer.current), []);
+  const enabled = PROVIDER === 'test';
 
-  const placeOrder = payment => {
-    setFlow({ stage: 'submitting', payment });
-    S.placeOrder({ contact: { email }, shipping: st.shipping, shippingMethod: st.shippingMethod || 'standard', payment })
-      .then(order => { ck.clear(); S.rememberLastOrder(order.id); setFlow(null); navigate(`#/order/${order.id}?new=1`); })
-      .catch(err => setFlow({ stage: 'result', kind: 'orderFailed', payment, reason: errorText(err) }));
-  };
-  const run = (payment, outcome, isCrypto) => {
-    setFlow({ stage: 'processing', payment, isCrypto });
-    timer.current = setTimeout(() => {
-      if (outcome !== 'ok') { setFlow({ stage: 'result', kind: 'failed', payment, reason: t(outcome === 'insufficient' ? 'pay.errFunds' : 'pay.errDeclined') }); return; }
-      placeOrder(payment);
-    }, isCrypto ? 3000 : 2200);
+  const charge = async outcome => {
+    setFlow({ stage: 'processing', outcome });
+    let pend = ck.get().pending;
+    try {
+      const sig = orderSig(ck.get(), email);
+      if (pend && pend.sig !== sig) { S.cancelPayment(pend).catch(() => {}); pend = null; ck.set({ pending: null }); }
+      if (!pend) {
+        const o = await S.createOrder({ email, shipping: st.shipping, shippingMethod: st.shippingMethod || 'standard' });
+        pend = { id: o.id, token: o.token, sig };
+        ck.set({ pending: pend });
+        if (st.contact && st.contact.newsletter) S.subscribe(email).catch(() => {});
+      }
+      const r = await S.payTest(pend, outcome);
+      if (r.status === 'paid') { ck.clear(); await S.completeOrder(pend.id); setFlow(null); navigate(`#/order/${pend.id}?new=1`); return; }
+      setFlow({ stage: 'result', kind: 'failed', outcome, reason: t(r.status === 'insufficient' ? 'pay.errFunds' : 'pay.errDeclined') });
+    } catch (err) {
+      /* the held order expired or was cancelled — the next attempt creates a fresh one */
+      if (pend && ['orderNotFound', 'invalidState'].includes(err.code)) ck.set({ pending: null });
+      setFlow({ stage: 'result', kind: 'orderFailed', outcome, reason: errorText(err) });
+    }
   };
   const pay = () => {
     if (!navigator.onLine) { f.setAlert({ type: 'error', msg: t('err.network') }); return; }
-    if (pm === 'crypto') { setFlow({ stage: 'crypto' }); return; }
+    if (!enabled) { f.setAlert({ type: 'error', msg: t('err.paymentsUnavailable') }); return; }
     const form = cardRef.current;
     const rules = {
       ccname: [V.required, V.min(2)],
@@ -258,16 +219,14 @@ function PaymentStep() {
     const d = f.validate(form, rules);
     if (!d) return;
     const digits = d.ccnum.replace(/\D/g, '');
-    const outcome = digits.endsWith('0002') ? 'declined' : digits.endsWith('9995') ? 'insufficient' : 'ok';
-    /* wipe sensitive values from the DOM as soon as they're read */
+    /* Sandbox only: the card number picks the simulated outcome and is never sent anywhere */
+    const outcome = digits.endsWith('0002') ? 'declined' : digits.endsWith('9995') ? 'insufficient' : 'success';
     form.elements.ccnum.value = ''; form.elements.cccvc.value = ''; setBrand('');
-    run({ method: 'card', brand: card.brand(digits), last4: digits.slice(-4) }, outcome);
+    charge(outcome);
   };
 
-  const cAmt = (tt.total / CRYPTO[coin].aedPerCoin).toFixed(coin === 'USDT' ? 2 : 6);
   const resultConf = flow && flow.stage === 'result' && {
     failed: { ic: 'alert', cls: 'err', title: t('pay.failedTitle'), text: flow.reason, next: t('pay.failedNext') },
-    cancelled: { ic: 'info', cls: 'info', title: t('pay.cancelledTitle'), text: flow.reason || t('pay.cancelledText') },
     orderFailed: { ic: 'alert', cls: 'err', title: t('pay.orderFailedTitle'), text: flow.reason, next: t('pay.orderFailedNext') }
   }[flow.kind];
 
@@ -282,12 +241,13 @@ function PaymentStep() {
 
       <h2 className="ck-h">{t('ck.step.payment')}</h2>
       {f.alert && <Alert>{f.alert.msg}</Alert>}
+      {!enabled && <Alert type="info">{t('pay.unavailable')} <a href="#/contact">{t('nav.contact')}</a></Alert>}
       <p className="muted small"><Icon name="lock" /> {t('pay.secureNote')}</p>
       <div className="pay-methods" role="radiogroup" aria-label={t('pay.method')}>
-        <div className={`pay-m${pm === 'card' ? ' on' : ''}`}>
-          <label className="pay-head"><input type="radio" name="pm" value="card" checked={pm === 'card'} onChange={() => setPm('card')} /><span><Icon name="card" /> {t('pay.card')}</span>
+        <div className="pay-m on">
+          <label className="pay-head"><input type="radio" name="pm" value="card" checked readOnly /><span><Icon name="card" /> {t('pay.card')}</span>
             <span className="pm-marks"><span className="pm pm-visa">VISA</span><span className="pm pm-mc"><i /><i /></span><span className="pm pm-amex">AMEX</span></span></label>
-          <form className="pay-body" data-card-form noValidate autoComplete="on" ref={cardRef} hidden={pm !== 'card'} onSubmit={e => { e.preventDefault(); pay(); }}>
+          <form className="pay-body" data-card-form noValidate autoComplete="on" ref={cardRef} hidden={!enabled} onSubmit={e => { e.preventDefault(); pay(); }}>
             <Field name="ccname" label={t('pay.nameOnCard')} required autoComplete="cc-name" error={f.errors.ccname} onClear={f.clear} />
             <div className={`field card-num${f.errors.ccnum ? ' invalid' : ''}`}>
               <label htmlFor="ccnum">{t('pay.cardNumber')}</label>
@@ -310,32 +270,17 @@ function PaymentStep() {
               <ul><li><code dir="ltr">4242 4242 4242 4242</code> — {t('pay.demoOk')}</li><li><code dir="ltr">4000 0000 0000 0002</code> — {t('pay.demoDecline')}</li><li><code dir="ltr">5555 5555 5555 4444</code> — Mastercard</li></ul></details>
           </form>
         </div>
-        {cryptoOn && (
-          <div className={`pay-m${pm === 'crypto' ? ' on' : ''}`}>
-            <label className="pay-head"><input type="radio" name="pm" value="crypto" checked={pm === 'crypto'} onChange={() => setPm('crypto')} /><span><Icon name="crypto" /> {t('pay.crypto')}</span><span className="pm-marks muted small">USDT · BTC · ETH</span></label>
-            {pm === 'crypto' && <div className="pay-body">
-              <fieldset className="fs"><legend>{t('pay.coin')}</legend><div className="coin-opts">{Object.entries(CRYPTO).map(([k, c]) => (
-                <label key={k} className="opt-card sm"><input type="radio" name="coin" value={k} checked={coin === k} onChange={() => setCoin(k)} /><span className="oc-body"><strong>{k}</strong><small>{c.network}</small></span></label>
-              ))}</div></fieldset>
-              <div className="coin-box"><p><span className="muted">{t('pay.cryptoAmount')}</span><strong dir="ltr">{cAmt} {coin}</strong><small className="muted">≈ {money(tt.total)} · {t('pay.cryptoRate')}</small></p>
-                <p className="muted small">{t('pay.cryptoHow', { network: CRYPTO[coin].network })}</p></div>
-            </div>}
-          </div>
-        )}
       </div>
       <p className="muted small terms">{t('ck.terms')} <a href="#/policies/terms">{t('policy.terms')}</a> · <a href="#/policies/privacy">{t('policy.privacy')}</a></p>
       <div className="ck-nav"><a className="link-arrow back" href="#/checkout/shipping"><Icon name="arrowRight" className="flip rot" /> {t('ck.back')}</a>
-        <button className="btn btn-teal btn-lg" data-action="pay" onClick={pay}><Icon name={pm === 'crypto' ? 'crypto' : 'lock'} /> {pm === 'crypto' ? t('pay.cryptoContinue') : t('pay.payNow', { amount: money(tt.total) })}</button></div>
+        <button className="btn btn-teal btn-lg" data-action="pay" onClick={pay} disabled={!enabled}><Icon name="lock" /> {t('pay.payNow', { amount: money(tt.total) })}</button></div>
 
-      {flow && flow.stage === 'crypto' && <CryptoModal coin={coin} onClose={() => setFlow(null)} onSent={() => run({ method: 'crypto', coin }, 'ok', true)}
-        onCancel={reason => setFlow({ stage: 'result', kind: 'cancelled', payment: { method: 'crypto', coin }, reason })} />}
-      {flow && (flow.stage === 'processing' || flow.stage === 'submitting') && (
+      {flow && flow.stage === 'processing' && (
         <Overlay title={t('pay.statusTitle')} size="sm" className="pay-ov" dismissible={false} onClose={() => {}}>
           <div className="pay-state">
             <Spinner big />
-            <h3>{flow.stage === 'submitting' ? t('pay.submitting') : t(flow.isCrypto ? 'pay.cryptoWaiting' : 'pay.processing')}</h3>
-            <p className="muted">{flow.stage === 'submitting' ? t('pay.paidCreating') : t('pay.dontClose')}</p>
-            {flow.stage === 'processing' && <button className="btn btn-ghost" onClick={() => { clearTimeout(timer.current); setFlow({ stage: 'result', kind: 'cancelled', payment: flow.payment }); }}>{t('pay.cancel')}</button>}
+            <h3>{t('pay.processing')}</h3>
+            <p className="muted">{t('pay.dontClose')}</p>
           </div>
         </Overlay>
       )}
@@ -348,9 +293,8 @@ function PaymentStep() {
               {resultConf.next && <p className="muted small">{resultConf.next}</p>}
               <div className="btn-row center">
                 {flow.kind === 'orderFailed'
-                  ? <button className="btn btn-primary" onClick={() => placeOrder(flow.payment)}>{t('common.retry')}</button>
-                  : <><button className="btn btn-primary" data-ov-close onClick={close}>{t('pay.tryAgain')}</button>
-                    {cryptoOn && <button className="btn btn-outline" onClick={() => { setPm(flow.payment.method === 'card' ? 'crypto' : 'card'); close(); }}>{t('pay.otherMethod')}</button>}</>}
+                  ? <button className="btn btn-primary" onClick={() => charge(flow.outcome)}>{t('common.retry')}</button>
+                  : <button className="btn btn-primary" data-ov-close onClick={close}>{t('pay.tryAgain')}</button>}
               </div>
             </div>
           )}

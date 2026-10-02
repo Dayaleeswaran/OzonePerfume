@@ -112,7 +112,7 @@ export default function Home() {
   const diffusers = S.collection('diffusers');
   const signature = S.collection('signature');
   const hotel = S.collection('hotel');
-  const reviews = S.db.reviews.filter(r => r.status === 'approved' && r.rating === 5).slice(0, 3);
+  const reviews = S.approvedReviews().filter(r => r.rating === 5).slice(0, 3);
   const tiles = [
     { href: '#/shop/diffusers', img: 'o8', t: 'nav.diffusers', s: 'tiles.diffusers' },
     { href: '#/deals/aroma', img: 'oil-prestige', t: 'nav.aromaDeals', s: 'tiles.aroma' },

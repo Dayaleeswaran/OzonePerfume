@@ -1,6 +1,7 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Icon from '../components/Icon.jsx';
 import { Img } from '../components/common.jsx';
+import { Spinner } from '../components/ui.jsx';
 import { S } from '../lib/store.js';
 import { t, pname } from '../lib/i18n.js';
 import { money, fmtDate } from '../lib/format.js';
@@ -63,8 +64,8 @@ export function OrderDetail({ o, inAccount }) {
         </div>
         <div className="od-side">
           <div className="card"><h3 className="card-h"><Icon name="pin" /> {t('order.shipTo')}</h3><p>{formatAddress(o.shipping)}</p></div>
-          <div className="card"><h3 className="card-h"><Icon name={o.payment.method === 'crypto' ? 'crypto' : 'card'} /> {t('order.payment')}</h3>
-            <p>{o.payment.method === 'crypto' ? t('pay.cryptoPaid', { coin: o.payment.coin }) : t('pay.cardPaid', { brand: t('pay.brand.' + (o.payment.brand || 'card')), last4: o.payment.last4 })}</p>
+          <div className="card"><h3 className="card-h"><Icon name="card" /> {t('order.payment')}</h3>
+            {o.payment.status === 'paid' && o.payment.method && <p>{t('pay.paidVia', { provider: t('pay.provider.' + o.payment.method) })}</p>}
             <p className={`status pay-${o.payment.status}`}>{t('paystatus.' + o.payment.status)}</p></div>
           {gifts.length > 0 && <div className="card"><h3 className="card-h"><Icon name="gift" /> {t('order.giftInfo')}</h3>
             {gifts.map((i, k) => <p key={k}><strong>{i.gift.recipientName}</strong>{i.gift.recipientEmail && <><br /><span className="muted">{i.gift.recipientEmail}</span></>}
@@ -78,13 +79,20 @@ export function OrderDetail({ o, inAccount }) {
 }
 
 export default function Order({ id, q }) {
+  const [state, setState] = useState(() => S.order(id) ? 'ready' : 'loading');
   const o = S.order(id);
-  const ok = o && S.canViewOrder(o);
   const isNew = q.new === '1';
   const h1 = useRef(null);
-  useTitle(!ok ? t('order.notFound') : isNew ? t('order.confirmedEyebrow') : t('order.title', { id }));
-  useEffect(() => { if (h1.current) h1.current.focus(); }, []);
-  if (!ok) return <NotFound msg={t('order.notFound')} />;
+  useEffect(() => {
+    let live = true;
+    /* Always refresh from the server: status may have changed since it was cached */
+    S.loadOrder(id).then(r => live && setState(r ? 'ready' : 'missing')).catch(() => live && setState(S.order(id) ? 'ready' : 'missing'));
+    return () => { live = false; };
+  }, [id]);
+  useTitle(state === 'missing' ? t('order.notFound') : isNew ? t('order.confirmedEyebrow') : t('order.title', { id }));
+  useEffect(() => { if (h1.current) h1.current.focus(); }, [state]);
+  if (!o && state === 'loading') return <div className="page-loading"><Spinner big /></div>;
+  if (!o) return <NotFound msg={t('order.notFound')} />;
   const u = S.user();
   return (
     <section className="container confirm">

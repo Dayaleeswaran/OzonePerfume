@@ -62,7 +62,11 @@ export function Login({ q }) {
     S.login(d.email, d.password).then(u => {
       ui.toast(t('auth.welcome', { name: u.name || u.email }), 'success');
       navigate(safeNext(q.next) || (u.role === 'admin' ? '#/admin' : '#/account'));
-    }).catch(err => { setBusy(false); f.setAlert({ type: 'error', msg: errorText(err) }); form.elements.password.value = ''; form.elements.password.focus(); });
+    }).catch(err => {
+      setBusy(false);
+      if (err.code === 'notConfirmed') { S.resendVerification(d.email).catch(() => {}); navigate('#/verify' + (q.next ? '?next=' + encodeURIComponent(q.next) : '')); return; }
+      f.setAlert({ type: 'error', msg: errorText(err) }); form.elements.password.value = ''; form.elements.password.focus();
+    });
   };
   return (
     <AuthShell title={t('auth.welcomeBack')} sub={t('auth.loginSub')}>
@@ -74,10 +78,10 @@ export function Login({ q }) {
         <div className="row-between"><span /><a href="#/reset" className="small">{t('auth.forgot')}</a></div>
         <Button type="submit" className="btn btn-primary btn-block btn-lg" busy={busy} busyLabel={t('auth.signingIn')}>{t('nav.login')}</Button>
         <p className="center muted">{t('auth.noAccount')} <a href={`#/register${q.next ? '?next=' + encodeURIComponent(q.next) : ''}`}>{t('auth.createAccount')}</a></p>
-        <details className="demo-note"><summary><Icon name="info" /> {t('auth.demoTitle')}</summary>
+        {import.meta.env.DEV && <details className="demo-note"><summary><Icon name="info" /> {t('auth.demoTitle')}</summary>
           <p>{t('auth.demoCustomer')}: <code>demo@ozonescents.com</code> / <code>Demo@123</code></p>
           <p>{t('auth.demoAdmin')}: <code>admin@ozonescents.com</code> / <code>Admin@123</code></p>
-        </details>
+        </details>}
       </form>
     </AuthShell>
   );
@@ -98,10 +102,10 @@ export function Register({ q }) {
     if (!d) return;
     if (!form.elements.terms.checked) { form.elements.terms.focus(); return; }
     setBusy(true);
-    S.register({ email: d.email, password: d.password, name: d.name }).then(() => {
-      if (d.newsletter) S.updatePrefs({ newsletter: true });
+    S.register({ email: d.email, password: d.password, name: d.name }).then(res => {
+      if (d.newsletter) S.subscribe(d.email).catch(() => {});
       ui.toast(t('auth.created'), 'success');
-      navigate('#/verify' + (q.next ? '?next=' + encodeURIComponent(q.next) : ''));
+      navigate(res.needsVerification ? '#/verify' + (q.next ? '?next=' + encodeURIComponent(q.next) : '') : (safeNext(q.next) || '#/account'));
     }).catch(err => { setBusy(false); f.setAlert({ type: 'error', msg: errorText(err) }); if (err.code === 'exists') form.elements.email.focus(); });
   };
   return (
@@ -128,25 +132,26 @@ export function Verify({ q }) {
   const [busy, setBusy] = useState(false);
   const [resending, setResending] = useState(false);
   const u = S.user();
-  const redirecting = useRedirect(!u ? '#/login' : u.verified ? (safeNext(q.next) || '#/account') : null);
+  const email = (u && u.email) || S.session.pendingEmail;
+  const redirecting = useRedirect(u && u.verified ? (safeNext(q.next) || '#/account') : !email ? '#/login' : null);
   if (redirecting) return null;
   const submit = e => {
     e.preventDefault();
     const form = e.currentTarget;
     const d = f.validate(form, { code: [V.required, V.code] }); if (!d) return;
     setBusy(true);
-    S.verify(d.code).then(() => { ui.toast(t('auth.verified'), 'success'); navigate(safeNext(q.next) || '#/account'); })
+    S.verify(d.code, email).then(() => { ui.toast(t('auth.verified'), 'success'); navigate(safeNext(q.next) || '#/account'); })
       .catch(err => { setBusy(false); f.setErrors({ code: errorText(err) }); form.elements.code.focus(); });
   };
   return (
     <AuthShell title={t('auth.verifyTitle')} sub={t('auth.verifySub')}>
       <form data-verify noValidate onSubmit={submit}>
-        <Alert type="info" icon="mail">{t('auth.verifySent', { email: u.email })}<br /><small>{t('auth.demoCode')} <strong dir="ltr">{u.verifyCode}</strong></small></Alert>
+        <Alert type="info" icon="mail">{t('auth.verifySent', { email })}<br /><small>{t('auth.checkSpam')}</small></Alert>
         <Field name="code" label={t('auth.code')} required autoComplete="one-time-code" inputMode="numeric" maxLength={6} dir="ltr" className="code-field" error={f.errors.code} onClear={f.clear} />
         <Button type="submit" className="btn btn-primary btn-block btn-lg" busy={busy} busyLabel={t('auth.verifying')}>{t('auth.verify')}</Button>
         <div className="row-between">
-          <Button className="link-btn" busy={resending} onClick={() => { setResending(true); S.resendVerification().then(() => { setResending(false); ui.toast(t('auth.resent'), 'info'); }).catch(err => { setResending(false); ui.toast(errorText(err), 'error'); }); }}>{t('auth.resend')}</Button>
-          <a href={safeNext(q.next) || '#/account'} className="small">{t('auth.later')}</a>
+          <Button className="link-btn" busy={resending} onClick={() => { setResending(true); S.resendVerification(email).then(() => { setResending(false); ui.toast(t('auth.resent'), 'info'); }).catch(err => { setResending(false); ui.toast(errorText(err), 'error'); }); }}>{t('auth.resend')}</Button>
+          {u && <a href={safeNext(q.next) || '#/account'} className="small">{t('auth.later')}</a>}
         </div>
       </form>
     </AuthShell>
@@ -162,7 +167,7 @@ export function Reset() {
     e.preventDefault();
     const d = f.validate(e.currentTarget, { email: [V.required, V.email] }); if (!d) return;
     setBusy(true);
-    S.requestReset(d.email).then(r => { setBusy(false); setStep({ n: 2, email: d.email, code: r.code }); })
+    S.requestReset(d.email).then(() => { setBusy(false); setStep({ n: 2, email: d.email }); })
       .catch(err => { setBusy(false); f.setAlert({ type: 'error', msg: errorText(err) }); });
   };
   const confirm = e => {
@@ -185,7 +190,7 @@ export function Reset() {
       )}
       {step.n === 2 && (
         <form noValidate onSubmit={confirm}>
-          <Alert type="success" icon="mail">{t('auth.resetSent', { email: step.email })}{step.code && <><br /><small>{t('auth.demoCode')} <strong dir="ltr">{step.code}</strong></small></>}</Alert>
+          <Alert type="success" icon="mail">{t('auth.resetSent', { email: step.email })}<br /><small>{t('auth.checkSpam')}</small></Alert>
           <Field name="code" label={t('auth.code')} required autoComplete="one-time-code" inputMode="numeric" maxLength={6} dir="ltr" className="code-field" error={f.errors.code} onClear={f.clear} autoFocus />
           <PasswordWithMeter f={f} label={t('auth.newPassword')} />
           <Field name="confirm" label={t('form.confirmPassword')} type="password" required autoComplete="new-password" error={f.errors.confirm} onClear={f.clear} />

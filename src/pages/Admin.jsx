@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Icon from '../components/Icon.jsx';
 import { Empty, Field, Check, Switch, Stars, Img } from '../components/common.jsx';
-import { Overlay, Button, Alert, useUI } from '../components/ui.jsx';
+import { Overlay, Button, Alert, Spinner, useUI } from '../components/ui.jsx';
 import { Logo, LocaleControls } from '../components/Header.jsx';
 import { OrderDetail } from './Order.jsx';
 import { S } from '../lib/store.js';
@@ -33,9 +33,9 @@ const Tile = ({ label, value, sub, ic }) => <div className="tile-stat card"><Ico
 
 /* ---------- dashboard ---------- */
 function Dashboard() {
-  const orders = S.db.orders.filter(o => !['cancelled', 'refunded'].includes(o.status));
+  const orders = S.db.orders.filter(o => o.payment.status === 'paid' && !['cancelled', 'refunded'].includes(o.status));
   const revenue = orders.reduce((a, o) => a + o.totals.total, 0);
-  const customers = Object.values(S.db.users).filter(u => u.role !== 'admin').length;
+  const customers = S.db.customers.length;
   const low = S.db.products.filter(p => p.stock <= 10);
   const pending = S.db.reviews.filter(r => r.status === 'pending');
   return (<>
@@ -192,7 +192,7 @@ function Products({ sub }) {
   const [q, setQ] = useState('');
   const [editing, setEditing] = useState(sub === 'new' ? 'new' : null);
   const list = S.db.products.filter(p => !q || (p.name.en + ' ' + p.sku + ' ' + p.type).toLowerCase().includes(q.toLowerCase()));
-  const del = async p => { if (await ui.confirm(t('admin.confirmDeleteProduct', { name: p.name.en }), { confirmLabel: t('common.delete') })) S.admin.deleteProduct(p.id).then(() => ui.toast(t('admin.productDeleted'), 'info')); };
+  const del = async p => { if (await ui.confirm(t('admin.confirmDeleteProduct', { name: p.name.en }), { confirmLabel: t('common.delete') })) S.admin.deleteProduct(p.id).then(() => ui.toast(t('admin.productDeleted'), 'info')).catch(er => ui.toast(errorText(er), 'error')); };
   return (<>
     <div className="adm-toolbar">
       <label className="search-inline"><Icon name="search" /><span className="sr-only">{t('admin.searchProducts')}</span><input type="search" value={q} onChange={e => setQ(e.target.value)} placeholder={t('admin.searchProducts')} /></label>
@@ -245,7 +245,7 @@ function OrderView({ id }) {
   const [status, setStatus] = useState(o ? o.status : '');
   const [busy, setBusy] = useState(false);
   if (!o) return <Empty ic="box" title={t('order.notFound')}><a className="btn btn-primary" href="#/admin/orders">{t('order.back')}</a></Empty>;
-  const cust = S.db.users[o.user || o.email];
+  const cust = !!o.user;
   return (<>
     <a className="link-arrow back" href="#/admin/orders"><Icon name="arrowRight" className="flip rot" /> {t('order.back')}</a>
     <div className="adm-order-head card">
@@ -282,13 +282,13 @@ function Orders({ sub }) {
 
 /* ---------- customers / inventory / payments ---------- */
 function Customers() {
-  const users = Object.values(S.db.users).filter(u => u.role !== 'admin');
+  const users = S.db.customers;
   return <Table caption={t('admin.customers')} empty={t('admin.noCustomers')}
     cols={[{ label: t('form.fullName') }, { label: t('form.email') }, { label: t('admin.verified') }, { label: t('account.orders'), cls: 'num' }, { label: t('admin.spent'), cls: 'num' }, { label: t('account.addresses'), cls: 'num' }, { label: t('account.dates'), cls: 'num' }, { label: t('admin.joined') }]}
-    rows={users.map(u => { const os = S.db.orders.filter(o => o.user === u.email || o.email === u.email); return (
-      <tr key={u.email}><td>{u.name || '—'}</td><td>{u.email}</td><td>{u.verified ? <span className="status status-delivered">{t('admin.yes')}</span> : <span className="status status-processing">{t('admin.no')}</span>}</td>
-        <td className="num">{os.length}</td><td className="num">{aed(os.reduce((a, o) => a + o.totals.total, 0))}</td><td className="num">{u.addresses.length}</td><td className="num">{u.dates.length}</td><td>{fmtDate(u.created)}</td></tr>
-    ); })} />;
+    rows={users.map(u => (
+      <tr key={u.id}><td>{u.name || '—'}</td><td>{u.email}</td><td>{u.verified ? <span className="status status-delivered">{t('admin.yes')}</span> : <span className="status status-processing">{t('admin.no')}</span>}</td>
+        <td className="num">{u.orders}</td><td className="num">{aed(u.spent)}</td><td className="num">{u.addresses}</td><td className="num">{u.dates}</td><td>{fmtDate(u.created)}</td></tr>
+    ))} />;
 }
 
 function InventoryRow({ p }) {
@@ -319,18 +319,18 @@ function Inventory() {
 
 function Payments() {
   const os = S.db.orders;
-  const sum = m => os.filter(o => o.payment.method === m && o.payment.status === 'paid').reduce((a, o) => a + o.totals.total, 0);
+  const paid = os.filter(o => o.payment.status === 'paid');
   return (<>
     <div className="tiles-stat">
-      <Tile label={t('pay.card')} value={aed(sum('card'))} sub={t('admin.nPayments', { n: os.filter(o => o.payment.method === 'card').length })} ic="card" />
-      <Tile label={t('pay.crypto')} value={aed(sum('crypto'))} sub={t('admin.nPayments', { n: os.filter(o => o.payment.method === 'crypto').length })} ic="crypto" />
+      <Tile label={t('paystatus.paid')} value={aed(paid.reduce((a, o) => a + o.totals.total, 0))} sub={t('admin.nPayments', { n: paid.length })} ic="card" />
+      <Tile label={t('paystatus.pending')} value={os.filter(o => o.payment.status === 'pending').length} ic="clock" />
       <Tile label={t('paystatus.refunded')} value={os.filter(o => o.payment.status === 'refunded').length} ic="refresh" />
     </div>
     <Alert type="info" icon="shield">{t('admin.paymentsNote')}</Alert>
     <Table caption={t('admin.payments')} cols={[{ label: t('order.number') }, { label: t('order.date') }, { label: t('pay.method') }, { label: t('admin.reference') }, { label: t('order.status') }, { label: t('cart.total'), cls: 'num' }]}
       rows={os.map(o => <tr key={o.id}><td><a href={`#/admin/orders/${o.id}`}>{o.id}</a></td><td>{fmtDate(o.date)}</td>
-        <td><Icon name={o.payment.method === 'crypto' ? 'crypto' : 'card'} /> {o.payment.method === 'crypto' ? t('pay.crypto') : t('pay.brand.' + (o.payment.brand || 'card'))}</td>
-        <td>{o.payment.method === 'crypto' ? o.payment.coin : '•••• ' + o.payment.last4}</td><td><span className={`status pay-${o.payment.status}`}>{t('paystatus.' + o.payment.status)}</span></td><td className="num">{aed(o.totals.total)}</td></tr>)} />
+        <td>{o.payment.method ? t('pay.provider.' + o.payment.method) : '—'}</td>
+        <td><code className="small">{o.payment.ref || '—'}</code></td><td><span className={`status pay-${o.payment.status}`}>{t('paystatus.' + o.payment.status)}</span></td><td className="num">{aed(o.totals.total)}</td></tr>)} />
   </>);
 }
 
@@ -370,7 +370,7 @@ function CouponForm({ c, onClose }) {
 function Coupons() {
   const ui = useUI();
   const [editing, setEditing] = useState(null);
-  const del = async c => { if (await ui.confirm(t('admin.confirmDeleteCoupon', { code: c.code }), { confirmLabel: t('common.delete') })) S.admin.deleteCoupon(c.code); };
+  const del = async c => { if (await ui.confirm(t('admin.confirmDeleteCoupon', { code: c.code }), { confirmLabel: t('common.delete') })) S.admin.deleteCoupon(c.code).catch(er => ui.toast(errorText(er), 'error')); };
   return (<>
     <div className="adm-toolbar"><span /><button className="btn btn-primary" onClick={() => setEditing('new')}><Icon name="plus" /> {t('admin.addCoupon')}</button></div>
     <Table caption={t('admin.coupons')} cols={[{ label: t('admin.code') }, { label: t('admin.ctype') }, { label: t('admin.value'), cls: 'num' }, { label: t('admin.minOrder'), cls: 'num' }, { label: t('admin.note') }, { label: t('order.status') }, { label: '' }]}
@@ -386,7 +386,7 @@ function Reviews() {
   const ui = useUI();
   const [filter, setFilter] = useState(() => S.db.reviews.some(r => r.status === 'pending') ? 'pending' : 'all');
   const list = S.db.reviews.filter(r => filter === 'all' || r.status === filter);
-  const mod = (r, st) => S.admin.moderateReview(r.id, st).then(() => ui.toast(t('admin.reviewUpdated'), 'success'));
+  const mod = (r, st) => S.admin.moderateReview(r.id, st).then(() => ui.toast(t('admin.reviewUpdated'), 'success')).catch(er => ui.toast(errorText(er), 'error'));
   return (<>
     <div className="adm-toolbar"><div className="seg" role="group" aria-label={t('order.status')}>
       {['pending', 'approved', 'rejected', 'all'].map(s => <button key={s} className={`seg-btn${s === filter ? ' on' : ''}`} aria-pressed={s === filter} onClick={() => setFilter(s)}>
@@ -421,10 +421,10 @@ function Gifts() {
 function Dates() {
   const today = new Date(new Date().toDateString());
   const rows = [];
-  Object.values(S.db.users).forEach(u => u.dates.forEach(d => {
+  S.db.dates.forEach(d => {
     const dt = new Date(d.date + 'T00:00:00'); const n = new Date(today.getFullYear(), dt.getMonth(), dt.getDate()); if (n < today) n.setFullYear(n.getFullYear() + 1);
-    rows.push({ u, d, n, days: Math.round((n - today) / 864e5) });
-  }));
+    rows.push({ u: { email: d.email }, d, n, days: Math.round((n - today) / 864e5) });
+  });
   rows.sort((a, b) => a.n - b.n);
   return (<>
     <div className="tiles-stat">
@@ -450,7 +450,7 @@ function Translations() {
   const list = keys.filter(k => !ql || k.toLowerCase().includes(ql) || ['en', 'es', 'ar'].some(l => String(t.raw(l, k)).toLowerCase().includes(ql))).slice(0, 60);
   const save = (l, k, value) => {
     const base = DICTS[l][k];
-    S.admin.saveTranslation(l, k, value === base ? '' : value).then(() => ui.toast(t('admin.saved'), 'success'));
+    S.admin.saveTranslation(l, k, value === base ? '' : value).then(() => ui.toast(t('admin.saved'), 'success')).catch(er => ui.toast(errorText(er), 'error'));
   };
   return (<>
     <div className="adm-toolbar"><label className="search-inline"><Icon name="search" /><span className="sr-only">{t('admin.searchKeys')}</span><input type="search" value={q} onChange={e => setQ(e.target.value)} placeholder={t('admin.searchKeys')} /></label></div>
@@ -478,7 +478,7 @@ function Settings() {
       const d = f.validate(e.currentTarget, { freeShippingThreshold: [nonNeg], shippingFee: [nonNeg], expressFee: [nonNeg], vatRate: [nonNeg], wrap_standard: [nonNeg], wrap_premium: [nonNeg], wrap_luxury: [nonNeg] });
       if (!d) return;
       setBusy(true);
-      S.admin.saveSettings({ freeShippingThreshold: +d.freeShippingThreshold, shippingFee: +d.shippingFee, expressFee: +d.expressFee, vatRate: +d.vatRate, giftWrap: { standard: +d.wrap_standard, premium: +d.wrap_premium, luxury: +d.wrap_luxury }, cryptoEnabled: !!d.cryptoEnabled, announcement: !!d.announcement })
+      S.admin.saveSettings({ freeShippingThreshold: +d.freeShippingThreshold, shippingFee: +d.shippingFee, expressFee: +d.expressFee, vatRate: +d.vatRate, giftWrap: { standard: +d.wrap_standard, premium: +d.wrap_premium, luxury: +d.wrap_luxury }, announcement: !!d.announcement })
         .then(() => { setBusy(false); ui.toast(t('admin.saved'), 'success'); }).catch(er => { setBusy(false); f.setAlert({ type: 'error', msg: errorText(er) }); });
     }}>
       <h2 className="card-h">{t('admin.shippingTax')}</h2>
@@ -489,12 +489,9 @@ function Settings() {
       <h2 className="card-h">{t('gift.packaging')} (AED)</h2>
       <div className="grid-3">{['standard', 'premium', 'luxury'].map(w => <Field key={w} name={'wrap_' + w} label={t('gift.wrap.' + w)} type="number" defaultValue={s.giftWrap[w]} min="0" error={f.errors['wrap_' + w]} onClear={f.clear} />)}</div>
       <h2 className="card-h">{t('admin.storefront')}</h2>
-      <label className="switch-row"><span>{t('admin.cryptoOn')}</span><Switch name="cryptoEnabled" defaultChecked={s.cryptoEnabled} label={t('admin.cryptoOn')} /></label>
       <label className="switch-row"><span>{t('admin.annOn')}</span><Switch name="announcement" defaultChecked={s.announcement} label={t('admin.annOn')} /></label>
       <div className="btn-row"><Button type="submit" busy={busy} busyLabel={t('common.saving')}>{t('common.saveChanges')}</Button></div>
     </form>
-    <div className="card form-card danger-zone"><h2 className="card-h">{t('admin.demoData')}</h2><p className="muted">{t('admin.demoDataText')}</p>
-      <button className="btn btn-danger" onClick={async () => { if (await ui.confirm(t('admin.resetConfirm'), { confirmLabel: t('admin.resetDemo') })) S.admin.resetDemo(); }}><Icon name="refresh" /> {t('admin.resetDemo')}</button></div>
   </>);
 }
 
@@ -511,8 +508,11 @@ export default function Admin({ section = 'dashboard', sub }) {
   const redirect = !u ? '#/login?next=' + encodeURIComponent('/admin') + '&reason=admin' : null;
   useEffect(() => { if (redirect) location.replace(location.href.split('#')[0] + redirect); }, [redirect]);
   useEffect(() => { setMenu(false); if (h1.current) h1.current.focus({ preventScroll: true }); }, [section, sub]);
+  const isAdmin = !!u && u.role === 'admin';
+  const [loadErr, setLoadErr] = useState(null);
+  useEffect(() => { if (isAdmin && !S.adminLoaded) S.admin.load().catch(setLoadErr); }, [isAdmin]);
   if (!u) return null;
-  if (u.role !== 'admin') return <section className="container section"><Empty ic="lock" title={t('admin.forbidden')} text={t('admin.forbiddenText')}><a className="btn btn-primary" href="#/">{t('nav.home')}</a></Empty></section>;
+  if (!isAdmin) return <section className="container section"><Empty ic="lock" title={t('admin.forbidden')} text={t('admin.forbiddenText')}><a className="btn btn-primary" href="#/">{t('nav.home')}</a></Empty></section>;
 
   const pending = S.db.reviews.filter(r => r.status === 'pending').length;
   const newOrders = S.db.orders.filter(o => o.status === 'processing').length;
@@ -540,7 +540,7 @@ export default function Admin({ section = 'dashboard', sub }) {
             <span className="avatar sm" aria-hidden="true">{(u.name || 'A')[0]}</span><span className="adm-user">{u.name}</span>
           </div>
         </header>
-        <div className="adm-body" key={section + (sub || '')}><Sec sub={sub} /></div>
+        <div className="adm-body" key={section + (sub || '')}>{S.adminLoaded ? <Sec sub={sub} /> : loadErr ? <Alert>{errorText(loadErr)}</Alert> : <div className="page-loading"><Spinner big /></div>}</div>
       </div>
     </div>
   );
