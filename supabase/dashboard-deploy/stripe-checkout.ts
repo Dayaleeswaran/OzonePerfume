@@ -151,11 +151,7 @@ Deno.serve(async req => {
     if (order.status !== 'awaiting_payment') return reply(409, { error: 'invalidState' });
 
     const { data: extra } = await admin.from('orders').select('payment_session_id, email, lang').eq('id', order.id).single();
-
-    /* a retry closes the previous session first, so the same order can never be paid twice */
-    if (extra?.payment_session_id) {
-      try { await stripe(`/checkout/sessions/${extra.payment_session_id}/expire`); } catch { /* already completed/expired */ }
-    }
+    const previous = extra?.payment_session_id;
 
     const session = await stripe('/checkout/sessions', {
       mode: 'payment',
@@ -171,7 +167,13 @@ Deno.serve(async req => {
       expires_at: Math.floor(Date.now() / 1000) + 30 * 60          // Stripe minimum: 30 minutes
     }, { idempotencyKey: `${order.id}-${crypto.randomUUID()}` });
 
+    /* Record the NEW session first, then close the previous one. In this order, the "expired" webhook for the
+       old session can never match the order's current session, so it can't cancel the order (race found in testing).
+       Closing the old session also means the same order can never be paid twice. */
     await admin.from('orders').update({ payment_session_id: session.id, payment_provider: 'stripe' }).eq('id', order.id);
+    if (previous && previous !== session.id) {
+      try { await stripe(`/checkout/sessions/${previous}/expire`); } catch { /* already completed/expired */ }
+    }
     return reply(200, { url: session.url });
   } catch (e) {
     console.error('stripe-checkout', order_id, (e as Error).message);

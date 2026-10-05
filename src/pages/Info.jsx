@@ -10,6 +10,7 @@ import { useForm } from '../lib/useForm.js';
 import { useTitle } from '../lib/router.js';
 import { useSeo } from '../lib/seo.js';
 import ShippingInfo from '../components/ShippingInfo.jsx';
+import { useCaptcha } from '../components/Captcha.jsx';
 import { BRAND } from '../data/catalog.js';
 import NotFound from './NotFound.jsx';
 
@@ -70,6 +71,7 @@ export function Contact() {
   const f = useForm();
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(null);
+  const cap = useCaptcha('contact');
   const doneRef = useRef(null);
   const u = S.user() || {};
   const topics = ['general', 'order', 'product', 'business', 'warranty'];
@@ -77,8 +79,10 @@ export function Contact() {
     e.preventDefault();
     const d = f.validate(e.currentTarget, { name: [V.required, V.min(2)], email: [V.required, V.email], phone: [V.phone], message: [V.required, V.min(10)] });
     if (!d) return;
+    if (!cap.ready()) { f.setAlert({ type: 'error', msg: t('captcha.wait') }); return; }
     setBusy(true);
-    S.sendMessage(d).then(() => { setBusy(false); setSent(d.email); setTimeout(() => doneRef.current && doneRef.current.focus(), 30); })
+    const token = cap.token; cap.reset();
+    S.sendMessage(d, token).then(() => { setBusy(false); setSent(d.email); setTimeout(() => doneRef.current && doneRef.current.focus(), 30); })
       .catch(err => { setBusy(false); f.setAlert({ type: 'error', msg: t('contact.error') + ' ' + errorText(err) }); });
   };
   return (<>
@@ -111,6 +115,7 @@ export function Contact() {
               <Field name="topic" label={t('contact.topic')} defaultValue="general" options={topics.map(x => ({ value: x, label: t('contact.topic.' + x) }))} />
             </div>
             <Field name="message" label={t('contact.message')} type="textarea" required rows={5} maxLength={2000} error={f.errors.message} onClear={f.clear} />
+            {cap.widget}
             <Button type="submit" className="btn btn-primary btn-lg" busy={busy} busyLabel={t('contact.sending')}><Icon name="mail" /> {t('contact.send')}</Button>
           </form>
         )}

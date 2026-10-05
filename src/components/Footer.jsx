@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import Icon from './Icon.jsx';
 import { PayMarks } from './common.jsx';
 import { Button } from './ui.jsx';
@@ -8,23 +8,30 @@ import { S } from '../lib/store.js';
 import { V } from '../lib/validate.js';
 import { errorText } from '../lib/format.js';
 import { BRAND } from '../data/catalog.js';
+import Captcha, { captchaEnabled } from './Captcha.jsx';
 
 function Newsletter() {
   const [state, setState] = useState({ busy: false, msg: '', ok: false, invalid: false });
+  const [armed, setArmed] = useState(false);          // load the CAPTCHA only when the visitor uses the form
+  const [token, setToken] = useState('');
+  const capRef = useRef(null);
   const submit = e => {
     e.preventDefault();
     const input = e.currentTarget.elements.email;
     const bad = V.email(input.value);
     if (bad) { setState({ busy: false, msg: t('val.email'), ok: false, invalid: true }); input.focus(); return; }
+    if (captchaEnabled && !token) { setArmed(true); setState({ busy: false, msg: t('captcha.wait'), ok: false, invalid: false }); return; }
     setState(s => ({ ...s, busy: true }));
-    S.subscribe(input.value.trim()).then(() => { input.value = ''; setState({ busy: false, msg: t('footer.subscribed'), ok: true, invalid: false }); })
+    const tok = token; if (capRef.current) capRef.current.reset();
+    S.subscribe(input.value.trim(), tok).then(() => { input.value = ''; setState({ busy: false, msg: t('footer.subscribed'), ok: true, invalid: false }); })
       .catch(err => setState({ busy: false, msg: errorText(err), ok: false, invalid: false }));
   };
   return (
-    <form className="f-news-form" onSubmit={submit} noValidate>
+    <form className="f-news-form" onSubmit={submit} noValidate onFocus={() => setArmed(true)}>
       <label htmlFor="news-email" className="sr-only">{t('form.email')}</label>
       <input id="news-email" name="email" type="email" autoComplete="email" placeholder={t('form.emailPh')} required aria-describedby="news-msg" aria-invalid={state.invalid || undefined} />
       <Button type="submit" className="btn btn-teal" busy={state.busy}>{t('footer.subscribe')}</Button>
+      {armed && <Captcha ref={capRef} onToken={setToken} action="newsletter" />}
       <p id="news-msg" className={`f-news-msg ${state.ok ? 'ok' : state.msg ? 'err' : ''}`} role="status">{state.msg}</p>
     </form>
   );

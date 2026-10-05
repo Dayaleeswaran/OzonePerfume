@@ -89,7 +89,8 @@ describe('Stripe webhook', () => {
     await service.rpc('mark_order_failed', { p_id: o.id, p_status: 'cancelled' });
     const r = await send(evt('checkout.session.completed', session(o)));
     assert.equal(r.status, 200);
-    assert.deepEqual(await r.json(), { attention: 'refund required' });
+    const body = await r.json();
+    assert.ok(body.attention === 'refund required' || body.refunded, JSON.stringify(body));   // test events have fake payment intents, so the auto-refund can't run locally
     assert.equal((await orderRow(o.id)).status, 'cancelled');
   });
 

@@ -168,8 +168,18 @@ Deno.serve(async req => {
         const ref = typeof obj.payment_intent === 'string' ? obj.payment_intent : obj.id;
         const { error } = await admin.rpc('mark_order_paid', { p_id: order.id, p_provider: 'stripe', p_ref: ref, p_amount: order.total, p_currency: order.currency });
         if (error) {
-          /* paid after the order was cancelled/expired: money was taken but the order can't be fulfilled → needs a refund */
-          console.error('stripe-webhook: could not mark paid — REFUND REQUIRED', order.id, ref, error.message);
+          /* Paid after the order was cancelled/expired (stock already released): never keep money for an order we
+             can't fulfil — refund it automatically. Idempotency key = one refund per payment even if Stripe retries. */
+          console.error('stripe-webhook: paid on a closed order — refunding', order.id, ref, error.message);
+          if (typeof obj.payment_intent === 'string') {
+            try {
+              await stripe('/refunds', { payment_intent: obj.payment_intent, reason: 'requested_by_customer', metadata: { order_id: order.id, cause: 'order_closed_before_payment' } },
+                { idempotencyKey: `refund-closed-${obj.payment_intent}` });
+              return ok({ refunded: 'order closed before payment' });
+            } catch (e) {
+              console.error('stripe-webhook: AUTO-REFUND FAILED — refund manually in Stripe', order.id, (e as Error).message);
+            }
+          }
           return ok({ attention: 'refund required' });
         }
         return ok({ paid: order.id });

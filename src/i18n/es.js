@@ -328,6 +328,12 @@ Object.assign(es, {
 
 /* Production requirements update */
 Object.assign(es, {
+  "auth.verifyLink": "Si tu correo trae un enlace “Confirmar dirección de correo” en lugar de un código, haz clic en él y luego",
+  "auth.verifyLinkLogin": "inicia sesión aquí",
+  "captcha.wait": "Espera un momento mientras comprobamos que no eres un robot y vuelve a intentarlo.",
+  "captcha.loadFailed": "No se pudo cargar la verificación de seguridad. Revisa tu conexión o desactiva los bloqueadores y recarga la página.",
+  "err.captcha": "La verificación de seguridad falló. Inténtalo de nuevo.",
+  "err.captchaWait": "Espera un momento mientras comprobamos que no eres un robot y vuelve a intentarlo.",
   "pay.stripeText": "Te llevaremos a la página de pago segura de Stripe para completar tu pedido. Los datos de tu tarjeta se introducen en Stripe, nunca en este sitio.",
   "pay.stripeMethods": "Visa, Mastercard, American Express, Apple Pay y Google Pay",
   "pay.payStripe": "Pagar {amount} de forma segura",

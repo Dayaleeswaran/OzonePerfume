@@ -328,6 +328,12 @@ Object.assign(en, {
 
 /* Production requirements update */
 Object.assign(en, {
+  "auth.verifyLink": "If your email has a “Confirm email address” link instead of a code, click it, then",
+  "auth.verifyLinkLogin": "log in here",
+  "captcha.wait": "Please wait a moment while we check you’re not a robot, then try again.",
+  "captcha.loadFailed": "The security check could not load. Check your connection or disable content blockers, then reload the page.",
+  "err.captcha": "The security check failed. Please try again.",
+  "err.captchaWait": "Please wait a moment while we check you’re not a robot, then try again.",
   "pay.stripeText": "You’ll be taken to Stripe’s secure payment page to complete your order. Your card details are entered on Stripe, never on this site.",
   "pay.stripeMethods": "Visa, Mastercard, American Express, Apple Pay and Google Pay",
   "pay.payStripe": "Pay {amount} securely",

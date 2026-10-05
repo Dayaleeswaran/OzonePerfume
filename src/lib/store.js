@@ -49,7 +49,7 @@ function mapError(e) {
   const authMap = {
     user_already_exists: 'exists', email_exists: 'exists', invalid_credentials: 'badLogin', email_not_confirmed: 'notConfirmed',
     otp_expired: 'badCode', weak_password: 'weakPassword', over_email_send_rate_limit: 'rate_limited', over_request_rate_limit: 'rate_limited',
-    same_password: 'samePassword', reauthentication_needed: 'badPassword'
+    same_password: 'samePassword', reauthentication_needed: 'badPassword', captcha_failed: 'captcha'
   };
   if (authCode && authMap[authCode]) return { code: authMap[authCode] };
   if (/Invalid login credentials/i.test(msg)) return { code: 'badLogin' };
@@ -172,6 +172,15 @@ async function setAuth(user) {
   if (cache.auth) cache.wishlist = (await run(supabase.from('wishlist').select('product_id').eq('user_id', cache.auth.id))).map(w => w.product_id);
 }
 
+async function publicForm(body) {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) throw { code: 'network' };
+  const { error } = await supabase.functions.invoke('public-forms', { body });
+  if (!error) return;
+  let code = 'unknown';
+  try { code = (await error.context.json()).error; } catch (e) { if (/fetch|network/i.test(error.message || '')) code = 'network'; }
+  throw { code: ['captcha', 'rate_limited', 'invalidInput', 'network'].includes(code) ? code : 'unknown' };
+}
+
 /* ---------- totals (display only; the server recomputes at checkout) ---------- */
 function lineView(l) {
   const p = S.product(l.productId), s = S.size(p, l.sizeId);
@@ -265,12 +274,12 @@ export const S = {
   },
   isAdmin() { const u = S.user(); return !!u && u.role === 'admin'; },
 
-  async register({ email, password, name }) {
+  async register({ email, password, name, newsletter, captchaToken }) {
     email = email.trim().toLowerCase();
-    const data = await run(supabase.auth.signUp({ email, password, options: { data: { full_name: name.trim().slice(0, 100) } } }));
+    const data = await run(supabase.auth.signUp({ email, password, options: { data: { full_name: name.trim().slice(0, 100) }, captchaToken: captchaToken || undefined } }));
     /* Supabase returns a user with no identities when the email is already registered (anti-enumeration) */
     if (data.user && data.user.identities && data.user.identities.length === 0) throw { code: 'exists' };
-    session.pendingEmail = email; commit('auth');
+    session.pendingEmail = email; session.pendingNewsletter = !!newsletter; commit('auth');
     return { needsVerification: !data.session };
   },
   async verify(code, email = session.pendingEmail) {
@@ -279,15 +288,17 @@ export const S = {
     session.pendingEmail = null;
     const { data } = await supabase.auth.getUser();
     await setAuth(data.user); commit('auth');
+    /* newsletter ticked at sign-up: join now that the customer is signed in (no second CAPTCHA needed) */
+    if (session.pendingNewsletter) { session.pendingNewsletter = false; S.subscribe(email).catch(() => {}); }
   },
-  async resendVerification(email = session.pendingEmail || (cache.auth && cache.auth.email)) {
+  async resendVerification(email = session.pendingEmail || (cache.auth && cache.auth.email), captchaToken) {
     if (!email) throw { code: 'auth' };
-    await run(supabase.auth.resend({ type: 'signup', email }));
+    await run(supabase.auth.resend({ type: 'signup', email, options: { captchaToken: captchaToken || undefined } }));
   },
-  async login(email, password) {
+  async login(email, password, captchaToken) {
     email = email.trim().toLowerCase();
     try {
-      const data = await run(supabase.auth.signInWithPassword({ email, password }));
+      const data = await run(supabase.auth.signInWithPassword({ email, password, options: { captchaToken: captchaToken || undefined } }));
       await setAuth(data.user); commit('auth');
       return S.user();
     } catch (e) {
@@ -296,9 +307,9 @@ export const S = {
     }
   },
   async logout() { session.coupon = null; await supabase.auth.signOut(); await setAuth(null); commit('auth'); },
-  async requestReset(email) {
-    /* Always "succeeds" in the UI so it never reveals which emails are registered */
-    try { await run(supabase.auth.resetPasswordForEmail(email.trim().toLowerCase())); } catch (e) { if (e.code === 'network') throw e; }
+  async requestReset(email, captchaToken) {
+    /* Always "succeeds" in the UI so it never reveals which emails are registered (but a failed CAPTCHA is reported) */
+    try { await run(supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), { captchaToken: captchaToken || undefined })); } catch (e) { if (e.code === 'network' || e.code === 'captcha') throw e; }
     return {};
   },
   async resetPassword(email, code, password) {
@@ -310,9 +321,10 @@ export const S = {
     await run(supabase.from('profiles').update({ full_name: data.name.trim().slice(0, 100), phone: (data.phone || '').trim() }).eq('id', cache.auth.id));
     await loadUser(); commit('user');
   },
-  async changePassword(current, next) {
+  async changePassword(current, next, captchaToken) {
     /* re-authenticate with the current password before allowing a change */
-    try { await run(supabase.auth.signInWithPassword({ email: cache.auth.email, password: current })); } catch (e) { throw e.code === 'network' ? e : { code: 'badPassword' }; }
+    try { await run(supabase.auth.signInWithPassword({ email: cache.auth.email, password: current, options: { captchaToken: captchaToken || undefined } })); }
+    catch (e) { throw e.code === 'network' || e.code === 'captcha' ? e : { code: 'badPassword' }; }
     await run(supabase.auth.updateUser({ password: next }));
   },
   async updatePrefs(prefs) {
@@ -511,8 +523,9 @@ export const S = {
   },
 
   /* ---------- contact & newsletter ---------- */
-  async sendMessage(m) { await run(supabase.rpc('send_message', { p_name: m.name, p_email: m.email, p_phone: m.phone || '', p_topic: m.topic || 'general', p_message: m.message })); },
-  async subscribe(email) { await run(supabase.rpc('subscribe_newsletter', { p_email: email })); },
+  /* Contact + newsletter go through the public-forms Edge Function, which verifies the CAPTCHA server-side */
+  async sendMessage(m, captchaToken) { await publicForm({ kind: 'contact', name: m.name, email: m.email, phone: m.phone || '', topic: m.topic || 'general', message: m.message, captchaToken }); },
+  async subscribe(email, captchaToken) { await publicForm({ kind: 'newsletter', email, captchaToken }); },
 
   /* ---------- admin (every call is re-checked by RLS / is_admin() on the server) ---------- */
   admin: {

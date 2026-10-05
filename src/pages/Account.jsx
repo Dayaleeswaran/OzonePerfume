@@ -11,6 +11,7 @@ import { t, pname } from '../lib/i18n.js';
 import { money, fmtDate, errorText } from '../lib/format.js';
 import { V } from '../lib/validate.js';
 import { useForm } from '../lib/useForm.js';
+import { useCaptcha } from '../components/Captcha.jsx';
 import { useShopActions } from '../lib/useActions.js';
 import { navigate, redirectTo, useTitle } from '../lib/router.js';
 
@@ -289,6 +290,7 @@ function Dates() {
 const WishlistSection = () => <><h2 className="acc-h">{t('account.wishlist')}</h2><WishlistBlock /></>;
 
 function Settings() {
+  const cap = useCaptcha('password');
   const ui = useUI();
   const f = useForm();
   const [busy, setBusy] = useState(false);
@@ -308,7 +310,7 @@ function Settings() {
       const form = e.currentTarget;
       const d = f.validate(form, { current: [V.required], password: [V.required, V.password, (v, all) => v !== all.current ? '' : t('val.samePw')] }); if (!d) return;
       setBusy(true);
-      S.changePassword(d.current, d.password).then(() => { setBusy(false); form.reset(); setLevel(0); ui.toast(t('settings.pwChanged'), 'success'); })
+      (cap.ready() ? (p => { cap.reset(); return p; })(S.changePassword(d.current, d.password, cap.token)) : Promise.reject({ code: 'captchaWait' })).then(() => { setBusy(false); form.reset(); setLevel(0); ui.toast(t('settings.pwChanged'), 'success'); })
         .catch(err => { setBusy(false); if (err.code === 'badPassword') { f.setErrors({ current: errorText(err) }); form.elements.current.focus(); } else f.setAlert({ type: 'error', msg: errorText(err) }); });
     }}>
       <h3 className="card-h">{t('settings.password')}</h3>
@@ -317,6 +319,7 @@ function Settings() {
       <Field name="password" label={t('auth.newPassword')} type="password" required autoComplete="new-password" hint={t('val.passwordHint')} error={f.errors.password} onClear={f.clear}
         onChange={e => { const pw = e.target.value; let s = 0; if (pw.length >= 8) s++; if (pw.length >= 12) s++; if (/[A-Z]/.test(pw) && /[a-z]/.test(pw)) s++; if (/\d/.test(pw)) s++; if (/[^A-Za-z0-9]/.test(pw)) s++; setLevel(pw ? Math.min(4, s) : 0); }} />
       <div className="strength" data-level={level} aria-live="polite"><i /><i /><i /><i /><span>{level ? t('pw.s' + level) : ''}</span></div>
+      {cap.widget}
       <div className="btn-row"><Button type="submit" busy={busy} busyLabel={t('common.saving')}>{t('settings.updatePw')}</Button></div>
     </form>
     <div className="card form-card"><h3 className="card-h">{t('nav.logout')}</h3><p className="muted">{t('settings.logoutD')}</p>

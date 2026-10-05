@@ -430,3 +430,7 @@ verify_jwt = false
 # Stripe calls this with its own signature header (verified in code), not a Supabase JWT
 [functions.stripe-webhook]
 verify_jwt = false
+
+# Contact/newsletter: anonymous visitors, protected by Turnstile verification in code
+[functions.public-forms]
+verify_jwt = false
