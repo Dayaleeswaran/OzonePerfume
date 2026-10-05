@@ -10,6 +10,7 @@
    synchronously; every mutation goes to Supabase, then refreshes the cache and notifies React. */
 import { supabase } from './supabase.js';
 import { COLLECTIONS, LANGS, CURRENCIES } from '../data/catalog.js';
+import { computeTotals, quoteShipping, supportedCountries, findRule } from './pricing.js';
 
 const SESSION_KEY = 'oz_session_v3';
 const read = key => { try { return JSON.parse(localStorage.getItem(key)); } catch (e) { return null; } };
@@ -18,14 +19,14 @@ const uid = (p = '') => p + Math.random().toString(36).slice(2, 9) + Date.now().
 
 /* Per-browser state: language, currency, cart, guest wishlist, coupon, recently viewed */
 let session = Object.assign(
-  { lang: 'en', currency: 'AED', cart: [], wishlist: [], coupon: null, announcementClosed: false, recent: [], lastOrder: null, pendingEmail: null },
+  { lang: 'en', currency: 'AED', cart: [], wishlist: [], coupon: null, announcementClosed: false, recent: [], pendingEmail: null },
   read(SESSION_KEY) || {}
 );
 
 /* Server data cache */
 const cache = {
   ready: false, error: null,
-  products: [], settings: null, reviews: [], translations: { en: {}, es: {}, ar: {} },
+  products: [], settings: null, shippingRules: [], reviews: [], translations: { en: {}, es: {}, ar: {} },
   auth: null, profile: null, addresses: [], dates: [], wishlist: [], orders: [],
   admin: { loaded: false, orders: [], reviews: [], coupons: [], customers: [], dates: [], products: [] }
 };
@@ -36,7 +37,9 @@ let initPromise = null;
 function commit(evt) { version++; write(SESSION_KEY, session); listeners.forEach(fn => fn(evt)); }
 
 /* ---------- error mapping: Supabase/Postgres errors → our i18n error codes ---------- */
-const INPUT_ERRORS = ['invalidAddress', 'invalidGift', 'tooManyItems', 'invalidQty', 'invalidSize', 'notGiftable', 'invalidEmail', 'invalidShipping', 'invalidState'];
+const INPUT_ERRORS = ['invalidAddress', 'invalidGift', 'tooManyItems', 'invalidQty', 'invalidSize', 'notGiftable', 'invalidEmail', 'invalidShipping'];
+const PASS_THROUGH = ['couponInvalid', 'couponExpired', 'couponLogin', 'couponFirstOrder', 'emptyCart', 'unavailable', 'rate_limited', 'forbidden',
+  'orderNotFound', 'authRequired', 'notConfirmed', 'shippingUnavailable', 'invalidTransition', 'productInUse', 'invalidState'];
 function mapError(e) {
   if (!e) return { code: 'unknown' };
   if (e.code && typeof e.code === 'string' && /^[a-z]/.test(e.code) && !e.message) return e;
@@ -54,9 +57,9 @@ function mapError(e) {
   if (/expired|invalid.*otp|token has expired/i.test(msg)) return { code: 'badCode' };
   const [head, a, b] = msg.split(':');
   if (head === 'stock') return { code: 'stock', max: Number(b) || 0 };
-  if (head === 'couponMin') return { code: 'couponMin', min: Number(a) || 0 };
+  if (head === 'couponMin' || head === 'couponAbove') return { code: head, min: Number(a) || 0 };
   if (INPUT_ERRORS.includes(head)) return { code: 'invalidInput' };
-  if (['couponInvalid', 'couponExpired', 'emptyCart', 'unavailable', 'rate_limited', 'forbidden', 'orderNotFound'].includes(head)) return { code: head };
+  if (PASS_THROUGH.includes(head)) return { code: head };
   if (e.code === '23505') return { code: 'duplicate' };
   if (e.code === '42501' || /row-level security|permission denied/i.test(msg)) return { code: 'forbidden' };
   if (e.code === '23514') return { code: 'invalidInput' };
@@ -81,17 +84,23 @@ const mapProduct = r => ({
   id: r.id, sku: r.sku, type: r.type, line: r.line, family: r.family, spaces: r.spaces, price: Number(r.price), compareAt: Number(r.compare_at),
   stock: r.stock, active: r.active, giftable: r.giftable, bestSeller: r.best_seller, aromaDeal: r.aroma_deal, isNew: r.is_new,
   sizes: r.sizes, features: r.features, specs: r.specs, ideal: r.ideal, notes: r.notes, name: r.name, tagline: r.tagline, desc: r.description,
-  img: r.img, gallery: r.gallery || []
+  img: r.img, gallery: r.gallery || [], weight: r.weight_kg == null ? null : Number(r.weight_kg)
 });
 const unmapProduct = p => ({
   id: p.id, sku: p.sku, type: p.type, line: p.line || '', family: p.family || null, spaces: p.spaces, price: p.price, compare_at: p.compareAt || 0,
   stock: p.stock, active: p.active !== false, giftable: !!p.giftable, best_seller: !!p.bestSeller, aroma_deal: !!p.aromaDeal, is_new: !!p.isNew,
   sizes: p.sizes, features: p.features, specs: p.specs || [], ideal: p.ideal || null, notes: p.notes, name: p.name, tagline: p.tagline || {},
-  description: p.desc || {}, img: p.img, gallery: p.gallery || []
+  description: p.desc || {}, img: p.img, gallery: p.gallery || [], weight_kg: p.weight || null
 });
 const mapSettings = r => ({
-  freeShippingThreshold: Number(r.free_shipping_threshold), shippingFee: Number(r.shipping_fee), expressFee: Number(r.express_fee),
-  vatRate: Number(r.vat_rate), giftWrap: r.gift_wrap, announcement: r.announcement
+  freeShippingThreshold: Number(r.free_shipping_threshold), freeShippingInclusive: !!r.free_shipping_inclusive,
+  vatRate: Number(r.vat_rate), taxMode: r.tax_mode, lowStock: r.low_stock_threshold,
+  giftWrap: Object.fromEntries(Object.entries(r.gift_wrap || {}).map(([k, v]) => [k, Number(v)])),
+  announcement: r.announcement, features: r.features || {}
+});
+const mapRule = r => ({
+  id: r.id, country: r.country, method: r.method, minWeight: Number(r.min_weight_kg), maxWeight: r.max_weight_kg == null ? null : Number(r.max_weight_kg),
+  fee: Number(r.fee), freeEligible: r.free_eligible, eta: r.eta || {}, active: r.active
 });
 const mapReview = r => ({ id: r.id, productId: r.product_id, userId: r.user_id, name: r.author_name, rating: r.rating, title: r.title, body: r.body, status: r.status, verified: r.verified, date: r.created_at });
 const mapAddress = r => ({ id: r.id, label: r.label, firstName: r.first_name, lastName: r.last_name, country: r.country, line1: r.line1, line2: r.line2, city: r.city, state: r.state, phone: r.phone, isDefault: r.is_default });
@@ -99,11 +108,11 @@ const unmapAddress = a => ({ label: a.label || 'Address', first_name: a.firstNam
 const mapDate = r => ({ id: r.id, occasion: r.occasion, label: r.label, name: r.person_name, date: r.date, reminder: r.reminder, timing: r.timing, method: r.method, note: r.note, userId: r.user_id });
 const shipToUi = s => s && ({ firstName: s.first_name, lastName: s.last_name, country: s.country, line1: s.line1, line2: s.line2, city: s.city, state: s.state, phone: s.phone });
 const mapOrder = (o, items = [], events = []) => ({
-  id: o.id, date: o.created_at, email: o.email, user: o.user_id, status: o.status, currency: o.currency, coupon: o.coupon_code,
+  id: o.id, date: o.created_at, email: o.email, user: o.user_id, status: o.status, currency: o.currency, coupon: o.coupon_code, taxMode: o.tax_mode,
   shipping: shipToUi(o.shipping), shippingMethod: o.shipping_method,
   totals: { subtotal: Number(o.subtotal), savings: Number(o.savings), discount: Number(o.discount), giftFee: Number(o.gift_fee), shipping: Number(o.shipping_fee), vat: Number(o.vat), total: Number(o.total) },
   payment: { method: o.payment_provider, status: o.payment_status, ref: o.payment_ref },
-  items: items.map(i => ({ productId: i.product_id, sizeId: i.size_id, ml: i.ml, qty: i.qty, price: Number(i.unit_price), compareAt: Number(i.compare_at), name: i.name, img: i.img, gift: i.gift })),
+  items: items.map(i => ({ productId: i.product_id, sku: i.sku, sizeId: i.size_id, ml: i.ml, qty: i.qty, price: Number(i.unit_price), compareAt: Number(i.compare_at), name: i.name, img: i.img, gift: i.gift })),
   timeline: events.map(e => ({ status: e.status, date: e.created_at }))
 });
 
@@ -116,14 +125,16 @@ async function fetchOrders(filter) {
 
 /* ---------- loaders ---------- */
 async function loadPublic() {
-  const [products, settings, reviews, translations] = await Promise.all([
+  const [products, settings, rules, reviews, translations] = await Promise.all([
     run(supabase.from('products').select('*').order('created_at')),
     run(supabase.from('settings').select('*').eq('id', 1).single()),
+    run(supabase.from('shipping_rules').select('*').order('country').order('method').order('min_weight_kg')),
     run(supabase.from('reviews').select('*').order('created_at', { ascending: false })),
     run(supabase.from('translations').select('*'))
   ]);
   cache.products = products.map(mapProduct);
   cache.settings = mapSettings(settings);
+  cache.shippingRules = rules.map(mapRule);
   cache.reviews = reviews.map(mapReview);
   cache.translations = { en: {}, es: {}, ar: {} };
   translations.forEach(r => { cache.translations[r.lang][r.key] = r.value; });
@@ -165,7 +176,8 @@ async function setAuth(user) {
 function lineView(l) {
   const p = S.product(l.productId), s = S.size(p, l.sizeId);
   const price = S.unitPrice(p, l.sizeId), compare = S.unitCompare(p, l.sizeId);
-  return { line: l, product: p, size: s, price, compare, total: price * l.qty, saving: Math.max(0, compare - price) * l.qty };
+  const weight = s.weight_kg != null ? Number(s.weight_kg) : (p.weight || 0);
+  return { line: l, product: p, size: s, price, compare, weight, total: price * l.qty, saving: Math.max(0, compare - price) * l.qty };
 }
 
 export const S = {
@@ -199,6 +211,7 @@ export const S = {
   /* Admin views read this; it is filled by S.admin.load() and is protected by RLS on the server */
   get db() {
     return {
+      shippingRules: cache.shippingRules,
       products: cache.admin.loaded ? cache.admin.products : cache.products,
       orders: cache.admin.orders, reviews: cache.admin.reviews, coupons: cache.admin.coupons,
       customers: cache.admin.customers, dates: cache.admin.dates,
@@ -211,6 +224,17 @@ export const S = {
   setCurrency(c) { if (CURRENCIES[c]) { session.currency = c; commit('currency'); } },
   closeAnnouncement() { session.announcementClosed = true; commit('announcement'); },
   settings() { return cache.settings; },
+  /* Feature flags (requirements: special dates = Phase 2, crypto = future) */
+  feature(name) { return !!(cache.settings && cache.settings.features && cache.settings.features[name]); },
+
+  /* ---------- shipping (display mirror of the database rules) ---------- */
+  shippingRules() { return cache.shippingRules.filter(r => r.active); },
+  shipCountries() { return supportedCountries(S.shippingRules()); },
+  shipRule(country, method, weight = 0) { return findRule(S.shippingRules(), country, method, weight); },
+  shippingFor(country, method, opts = {}) {
+    const tt = S.totals({ country, shippingMethod: method });
+    return quoteShipping(S.shippingRules(), cache.settings, { country, method, weight: tt.weight, amount: tt.subtotal - tt.discount, forceFree: !!opts.forceFree });
+  },
 
   /* ---------- catalogue ---------- */
   products() { return cache.products.filter(p => p.active !== false); },
@@ -224,7 +248,7 @@ export const S = {
     const avg = list.length ? list.reduce((a, r) => a + r.rating, 0) / list.length : 0;
     return { avg: Math.round(avg * 10) / 10, count: list.length };
   },
-  stockState(p) { return p.stock <= 0 ? 'out' : p.stock <= 10 ? 'low' : 'in'; },
+  stockState(p) { return p.stock <= 0 ? 'out' : p.stock <= ((cache.settings && cache.settings.lowStock) ?? 10) ? 'low' : 'in'; },
   trackRecent(id) { session.recent = [id].concat(session.recent.filter(x => x !== id)).slice(0, 8); write(SESSION_KEY, session); },
 
   /* ---------- user ---------- */
@@ -347,47 +371,36 @@ export const S = {
   async applyCoupon(code) {
     const rows = await run(supabase.rpc('validate_coupon', { p_code: String(code || ''), p_subtotal: S.totals().subtotal }));
     const c = rows && rows[0]; if (!c) throw { code: 'couponInvalid' };
-    session.coupon = { code: c.code, type: c.type, value: Number(c.value), min: Number(c.min_subtotal), note: c.note };
+    session.coupon = { code: c.code, type: c.type, value: Number(c.value), min: Number(c.min_subtotal), minExclusive: !!c.min_exclusive, note: c.note };
     commit('coupon');
     return session.coupon;
   },
   removeCoupon() { session.coupon = null; commit('coupon'); },
   coupon() { return session.coupon; },
   lineView,
+  /* opts: { shippingMethod, country, lines } — country defaults to the UAE for cart estimates */
   totals(opts = {}) {
-    const set = cache.settings || { freeShippingThreshold: 0, shippingFee: 0, expressFee: 0, vatRate: 0, giftWrap: {} };
-    const lines = (opts.lines || S.cart()).map(lineView);
-    const subtotal = lines.reduce((a, v) => a + v.total, 0);
-    const savings = lines.reduce((a, v) => a + v.saving, 0);
+    const set = cache.settings || { freeShippingThreshold: 0, vatRate: 0, giftWrap: {}, taxMode: 'inclusive' };
+    const views = (opts.lines || S.cart()).map(lineView);
     const c = S.coupon();
-    let discount = 0, freeShip = false;
-    if (c && subtotal >= c.min) {
-      if (c.type === 'percent') discount = Math.round(subtotal * c.value) / 100;
-      else if (c.type === 'fixed') discount = Math.min(c.value, subtotal);
-      else if (c.type === 'ship') freeShip = true;
-    }
-    const giftFee = lines.reduce((a, v) => a + (v.line.gift ? Number(set.giftWrap[v.line.gift.wrap] || 0) : 0), 0);
-    const method = opts.shippingMethod || 'standard';
-    const afterDiscount = subtotal - discount;
-    let shipping = 0;
-    if (lines.length) shipping = method === 'express' ? set.expressFee : (freeShip || afterDiscount >= set.freeShippingThreshold) ? 0 : set.shippingFee;
-    const total = Math.max(0, afterDiscount + giftFee + shipping);
-    const vat = Math.round(total * set.vatRate / (100 + set.vatRate) * 100) / 100;
-    const toFree = Math.max(0, set.freeShippingThreshold - afterDiscount);
-    return { lines, subtotal, savings, discount, coupon: c, giftFee, shipping, method, vat, total, toFree, freeShip: freeShip || toFree === 0 };
+    const r = computeTotals({
+      lines: views.map(v => ({ unit: v.price, compare: v.compare, qty: v.line.qty, weight: v.weight, giftWrap: v.line.gift ? v.line.gift.wrap : null })),
+      settings: set, rules: S.shippingRules(), coupon: c, country: opts.country || 'AE', method: opts.shippingMethod || 'standard'
+    });
+    return Object.assign(r, { lines: views, coupon: c });
   },
 
   /* ---------- orders ---------- */
-  /* Creates the order server-side (status awaiting_payment, stock reserved) and returns {id, token, total} */
-  async createOrder({ email, shipping, shippingMethod }) {
+  /* Creates the order server-side for the signed-in customer (status awaiting_payment, stock reserved).
+     Totals are recomputed by the database; returns { id, token, total }. */
+  async createOrder({ shipping, shippingMethod }) {
+    if (!cache.auth) throw { code: 'authRequired' };
     const items = S.cart().map(l => ({ product_id: l.productId, size_id: l.sizeId, qty: l.qty, gift: l.gift || null }));
     const rows = await run(supabase.rpc('create_order', {
-      p_items: items, p_email: email, p_shipping_method: shippingMethod, p_coupon: session.coupon ? session.coupon.code : null,
+      p_items: items, p_shipping_method: shippingMethod, p_coupon: session.coupon ? session.coupon.code : null, p_lang: session.lang,
       p_shipping: { first_name: shipping.firstName, last_name: shipping.lastName, country: shipping.country, line1: shipping.line1, line2: shipping.line2 || '', city: shipping.city, state: shipping.state || '', phone: shipping.phone }
     }));
     const r = rows[0];
-    session.lastOrder = { id: r.order_id, token: r.access_token };
-    write(SESSION_KEY, session);
     await loadPublic();   // stock changed
     return { id: r.order_id, token: r.access_token, total: Number(r.total) };
   },
@@ -398,33 +411,47 @@ export const S = {
     if (!error) return data;
     let code = 'unknown';
     try { const b = await error.context.json(); code = b.error === 'disabled' ? 'paymentsUnavailable' : b.error; } catch (e) { if (/fetch|network/i.test(error.message || '')) code = 'network'; }
-    throw { code: ['orderNotFound', 'invalidState', 'paymentsUnavailable', 'invalidInput', 'network'].includes(code) ? code : 'unknown' };
+    throw { code: ['orderNotFound', 'invalidState', 'paymentsUnavailable', 'invalidInput', 'network', 'authRequired'].includes(code) ? code : 'unknown' };
+  },
+  /* Stripe Checkout: the server creates the session for the order total held in the database; we get the hosted page URL */
+  async stripeCheckout({ id, token }) {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) throw { code: 'network' };
+    const { data, error } = await supabase.functions.invoke('stripe-checkout', { body: { order_id: id, token } });
+    if (!error && data && data.url) return data.url;
+    let code = 'unknown';
+    try { const b = await error.context.json(); code = b.error; } catch (e) { if (/fetch|network/i.test((error && error.message) || '')) code = 'network'; }
+    throw { code: ['orderNotFound', 'invalidState', 'paymentsUnavailable', 'invalidInput', 'network', 'authRequired', 'alreadyPaid', 'paymentProvider'].includes(code) ? code : 'unknown' };
+  },
+  /* Back from a successful hosted payment: empty the cart and the checkout draft */
+  finishCheckout() {
+    session.cart = []; session.coupon = null;
+    try { sessionStorage.removeItem('oz_checkout_v1'); } catch (e) { /* storage blocked */ }
+    commit('cart');
   },
   async cancelPayment(pending) { await S.payTest(pending, 'cancel'); await loadPublic(); commit('stock'); },
   /* After a successful payment */
   async completeOrder(id) {
     session.cart = []; session.coupon = null;
-    if (cache.auth) await loadUser();
+    await loadUser();
     await S.loadOrder(id);
     commit('order');
   },
   order(id) {
-    return cache.orders.find(o => o.id === id) || cache.admin.orders.find(o => o.id === id) || (cache.guestOrder && cache.guestOrder.id === id ? cache.guestOrder : null);
+    return cache.orders.find(o => o.id === id) || cache.admin.orders.find(o => o.id === id) || null;
   },
+  /* Orders are readable by their owner and the admin only (FR-ORD-010) */
   async loadOrder(id) {
-    const token = session.lastOrder && session.lastOrder.id === id ? session.lastOrder.token : null;
-    if (!token && !cache.auth) return null;
-    const res = await run(supabase.rpc('get_order', { p_id: id, p_token: token || '00000000-0000-0000-0000-000000000000' }));
+    if (!cache.auth) return null;
+    const res = await run(supabase.rpc('get_order', { p_id: id }));
     if (!res) return null;
     const o = mapOrder(res.order, res.items, res.events);
-    if (cache.auth && o.user === cache.auth.id) cache.orders = [o].concat(cache.orders.filter(x => x.id !== o.id));
-    else cache.guestOrder = o;
+    if (o.user === cache.auth.id) cache.orders = [o].concat(cache.orders.filter(x => x.id !== o.id));
+    else cache.admin.orders = [o].concat(cache.admin.orders.filter(x => x.id !== o.id));
     commit('order');
     return o;
   },
   myOrders() { return cache.orders; },
   canViewOrder(o) { return !!o; },
-  rememberLastOrder() { /* kept for API compatibility; createOrder() stores the access token */ },
 
   /* ---------- addresses ---------- */
   async saveAddress(addr) {
@@ -490,16 +517,19 @@ export const S = {
   /* ---------- admin (every call is re-checked by RLS / is_admin() on the server) ---------- */
   admin: {
     async load() {
-      const [orders, reviews, coupons, customers, dates, products] = await Promise.all([
+      const [orders, reviews, coupons, customers, dates, products, rules] = await Promise.all([
         fetchOrders(), run(supabase.from('reviews').select('*').order('created_at', { ascending: false })),
         run(supabase.from('coupons').select('*').order('code')), run(supabase.rpc('admin_customers')),
-        run(supabase.from('special_dates').select('*')), run(supabase.from('products').select('*').order('created_at'))
+        run(supabase.from('special_dates').select('*')), run(supabase.from('products').select('*').order('created_at')),
+        run(supabase.from('shipping_rules').select('*').order('country').order('method').order('min_weight_kg'))
       ]);
+      cache.shippingRules = rules.map(mapRule);
       const emails = Object.fromEntries(customers.map(c => [c.id, c.email]));
       cache.admin = {
         loaded: true, orders,
         reviews: reviews.map(r => Object.assign(mapReview(r), { email: emails[r.user_id] || '' })),
-        coupons: coupons.map(c => ({ code: c.code, type: c.type, value: Number(c.value), min: Number(c.min_subtotal), active: c.active, note: c.note })),
+        coupons: coupons.map(c => ({ code: c.code, type: c.type, value: Number(c.value), min: Number(c.min_subtotal), minExclusive: c.min_exclusive,
+          firstOrderOnly: c.first_order_only, expires: c.expires_at ? c.expires_at.slice(0, 10) : '', active: c.active, note: c.note })),
         customers: customers.map(c => ({ id: c.id, email: c.email, name: c.full_name, verified: c.verified, created: c.created_at, orders: Number(c.orders), spent: Number(c.spent), addresses: Number(c.addresses), dates: Number(c.dates) })),
         dates: dates.map(d => Object.assign(mapDate(d), { email: emails[d.user_id] || '' })),
         products: products.map(mapProduct)
@@ -520,10 +550,21 @@ export const S = {
       await S.admin.refresh();
       return p;
     },
+    /* Ordered products can't be deleted (database guard) — they are archived (hidden) instead */
     async deleteProduct(id) { await run(supabase.from('products').delete().eq('id', id)); await S.admin.refresh(); },
+    async archiveProduct(p, archived = true) { return S.admin.saveProduct({ ...p, active: !archived }); },
+    async saveShippingRule(r) {
+      const row = { country: r.country.trim().toUpperCase(), method: r.method, min_weight_kg: r.minWeight || 0, max_weight_kg: r.maxWeight === '' || r.maxWeight == null ? null : r.maxWeight,
+        fee: r.fee, free_eligible: !!r.freeEligible, eta: r.eta || {}, active: r.active !== false };
+      if (r.id) await run(supabase.from('shipping_rules').update(row).eq('id', r.id));
+      else await run(supabase.from('shipping_rules').insert(row));
+      await S.admin.refresh();
+    },
+    async deleteShippingRule(id) { await run(supabase.from('shipping_rules').delete().eq('id', id)); await S.admin.refresh(); },
     async setOrderStatus(id, status) { await run(supabase.rpc('admin_set_order_status', { p_id: id, p_status: status })); await S.admin.load(); },
     async saveCoupon(c, originalCode) {
-      const row = { code: c.code.trim().toUpperCase(), type: c.type, value: c.value, min_subtotal: c.min, active: c.active, note: c.note };
+      const row = { code: c.code.trim().toUpperCase(), type: c.type, value: c.value, min_subtotal: c.min, min_exclusive: !!c.minExclusive,
+        first_order_only: !!c.firstOrderOnly, expires_at: c.expires ? c.expires + 'T23:59:59Z' : null, active: c.active, note: c.note };
       if (originalCode && originalCode !== row.code) {
         await run(supabase.from('coupons').insert(row));
         await run(supabase.from('coupons').delete().eq('code', originalCode));
@@ -539,8 +580,9 @@ export const S = {
     },
     async saveSettings(s) {
       await run(supabase.from('settings').update({
-        free_shipping_threshold: s.freeShippingThreshold, shipping_fee: s.shippingFee, express_fee: s.expressFee,
-        vat_rate: s.vatRate, gift_wrap: s.giftWrap, announcement: s.announcement
+        free_shipping_threshold: s.freeShippingThreshold, free_shipping_inclusive: !!s.freeShippingInclusive,
+        vat_rate: s.vatRate, tax_mode: s.taxMode, low_stock_threshold: s.lowStock,
+        gift_wrap: s.giftWrap, announcement: s.announcement, features: s.features
       }).eq('id', 1));
       await loadPublic(); commit('settings');
     },

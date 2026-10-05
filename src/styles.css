@@ -578,6 +578,9 @@ body.mode-bare .toasts { bottom: 24px; }
 .hero.paused .hero-slide.active .hero-media img { transition-duration: .8s; }
 .hero-inner { position: relative; height: 100%; display: flex; align-items: center; min-height: inherit; }
 .hero-copy { max-width: 580px; padding-block: 56px 90px; }
+/* Slides share one grid cell so the hero grows to its tallest slide — the dots/pause bar can never overlap the buttons */
+.hero-slides { display: grid; }
+.hero-slide { position: relative; inset: auto; grid-area: 1 / 1; min-height: clamp(540px, 76vh, 720px); }
 .hero-copy > * { opacity: 0; transform: translateY(26px); transition: opacity .8s var(--ease), transform .8s var(--ease); }
 .hero-slide.active .hero-copy > * { opacity: 1; transform: none; }
 .hero-slide.active .hero-copy > :nth-child(2) { transition-delay: .12s; }
@@ -1438,7 +1441,7 @@ body.mode-bare[data-route="admin"] { background: var(--bg-soft); }
   .car-track { grid-auto-columns: calc((100% - 2 * 16px) / 2.3); gap: 16px; }
   .car-btn { display: none; }
   .hero-slides { min-height: 0; display: grid; }
-  .hero-slide { position: relative; grid-area: 1 / 1; }
+  .hero-slide { position: relative; grid-area: 1 / 1; min-height: 0; }
   .hero-media { position: relative; width: 100%; aspect-ratio: 16/11; -webkit-mask-image: linear-gradient(180deg, #000 70%, transparent); mask-image: linear-gradient(180deg, #000 70%, transparent); }
   [dir="rtl"] .hero-media { -webkit-mask-image: linear-gradient(180deg, #000 70%, transparent); mask-image: linear-gradient(180deg, #000 70%, transparent); }
   .hero-inner { min-height: 0; height: auto; align-items: flex-start; }
@@ -1651,3 +1654,20 @@ body.mode-bare[data-route="admin"] { background: var(--bg-soft); }
 /* ---------- boot (loading catalogue + session from the server) ---------- */
 .boot-loading, .boot-error { min-height: 100vh; display: grid; place-content: center; justify-items: center; gap: 18px; text-align: center; padding: 24px; background: var(--bg, #0b0b0b); color: var(--ink, inherit); }
 .boot-loading .logo-word, .boot-error .logo-word { font-size: 28px; letter-spacing: .35em; }
+
+/* Contact location (no third-party map embed: keeps the CSP strict and avoids guessing coordinates) */
+.map.map-plain { padding: 24px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; }
+.map.map-plain p { display: inline-flex; align-items: center; gap: 8px; margin: 0; }
+.map.map-plain .map-link { position: static; }
+.gift-grid.single { grid-template-columns: 1fr; }
+
+/* Wide hero banners (1920x819) with the product right of centre: anchor the crop to the right */
+.hero-slide.pos-right .hero-media img { object-position: 80% 50%; }
+
+/* Two plain sections in a row would stack 2 × 104px of padding — keep one generous gap instead.
+   Sections with their own background (finder, quotes) keep full padding so their colour band stays balanced. */
+.section:not(.finder):not(.quotes-sec) + .section:not(.finder):not(.quotes-sec):not(.tiles-sec):not(.connect) { padding-top: clamp(16px, 2.5vw, 32px); }
+
+/* Stripe hosted payment */
+.stripe-info p { margin: 0 0 8px; }
+.pay-confirming { display: flex; align-items: center; gap: 10px; }

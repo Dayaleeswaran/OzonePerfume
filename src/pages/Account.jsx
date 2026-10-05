@@ -12,9 +12,11 @@ import { money, fmtDate, errorText } from '../lib/format.js';
 import { V } from '../lib/validate.js';
 import { useForm } from '../lib/useForm.js';
 import { useShopActions } from '../lib/useActions.js';
-import { navigate, useTitle } from '../lib/router.js';
+import { navigate, redirectTo, useTitle } from '../lib/router.js';
 
-const SECTIONS = [['profile', 'user'], ['orders', 'box'], ['wishlist', 'heart'], ['addresses', 'pin'], ['dates', 'calendar'], ['settings', 'settings']];
+const ALL_SECTIONS = [['profile', 'user'], ['orders', 'box'], ['wishlist', 'heart'], ['addresses', 'pin'], ['dates', 'calendar'], ['settings', 'settings']];
+/* Special dates are Phase 2 (GAP-010): hidden until the admin enables the feature */
+const sections = () => ALL_SECTIONS.filter(([k]) => k !== 'dates' || S.feature('special_dates'));
 const OCC_ICON = { birthday: 'gift', anniversary: 'heart', valentine: 'heart', christmas: 'sparkle', newYear: 'sparkle', custom: 'calendar' };
 const FIXED = { valentine: '02-14', christmas: '12-25', newYear: '01-01' };
 
@@ -37,30 +39,30 @@ export function WishlistBlock() {
   const toCart = async p => {
     setBusy(p.id);
     const ok = await addToCart(p, null, 1, { openDrawer: false });
-    if (ok) { await S.toggleWishlist(p.id); ui.toast(t('wish.moved'), 'success', { label: t('cart.viewCart'), href: '#/cart' }); }
+    if (ok) { await S.toggleWishlist(p.id); ui.toast(t('wish.moved'), 'success', { label: t('cart.viewCart'), href: '/cart' }); }
     setBusy(null);
   };
   const allToCart = async () => {
     setBusy('all');
     for (const id of S.wishlist()) { const p = S.product(id); if (p && p.stock > 0) { try { await S.addToCart(id, null, 1); await S.toggleWishlist(id); } catch (e) { /* skip unavailable */ } } }
     setBusy(null);
-    ui.toast(t('wish.allMoved'), 'success', { label: t('cart.viewCart'), href: '#/cart' });
+    ui.toast(t('wish.allMoved'), 'success', { label: t('cart.viewCart'), href: '/cart' });
   };
   const guestNote = !u && (
     <div className="alert alert-info wish-guest"><Icon name="lock" /><span>{t('wish.guestNote')}</span>
-      <a className="btn btn-sm btn-primary" href={`#/login?next=${encodeURIComponent('/wishlist')}&reason=wishlist`}>{t('nav.login')}</a>
-      <a className="btn btn-sm btn-outline" href={`#/register?next=${encodeURIComponent('/wishlist')}`}>{t('auth.createAccount')}</a></div>
+      <a className="btn btn-sm btn-primary" href={`/login?next=${encodeURIComponent('/wishlist')}&reason=wishlist`}>{t('nav.login')}</a>
+      <a className="btn btn-sm btn-outline" href={`/register?next=${encodeURIComponent('/wishlist')}`}>{t('auth.createAccount')}</a></div>
   );
   if (!items.length) return (<>{guestNote}<Empty ic="heart" title={t('wish.emptyTitle')} text={t('wish.emptyText')}>
-    <a className="btn btn-primary" href="#/shop/diffusers">{t('wish.discover')}</a><a className="btn btn-outline" href="#/deals/aroma">{t('home.oilsTitle')}</a></Empty></>);
+    <a className="btn btn-primary" href="/shop/diffusers">{t('wish.discover')}</a><a className="btn btn-outline" href="/deals/aroma">{t('home.oilsTitle')}</a></Empty></>);
   return (<>
     {guestNote}
     <div className="wish-bar"><p className="muted">{t('wish.count', { n: items.length })}</p>
       <Button className="btn btn-outline btn-sm" busy={busy === 'all'} busyLabel={t('cart.adding')} onClick={allToCart}><Icon name="bag" /> {t('wish.allToCart')}</Button></div>
     <ul className="wish-list">{items.map(p => (
       <li key={p.id} className="wish-item">
-        <a href={`#/product/${p.id}`} className="wi-img"><Img k={p.img} /></a>
-        <div className="wi-body"><p className="pcard-type">{t('type.' + p.type)}</p><a className="wi-name" href={`#/product/${p.id}`}>{pname(p)}</a>
+        <a href={`/product/${p.id}`} className="wi-img"><Img k={p.img} /></a>
+        <div className="wi-body"><p className="pcard-type">{t('type.' + p.type)}</p><a className="wi-name" href={`/product/${p.id}`}>{pname(p)}</a>
           <p className="pcard-price">{p.compareAt > p.price && <s>{money(p.compareAt)}</s>}<strong>{money(p.price)}</strong></p><StockLabel p={p} /></div>
         <div className="wi-actions">
           <Button className="btn btn-teal btn-sm" busy={busy === p.id} busyLabel={t('cart.adding')} disabled={p.stock <= 0} onClick={() => toCart(p)}>{p.stock <= 0 ? t('stock.out') : t('wish.moveToCart')}</Button>
@@ -74,7 +76,7 @@ export function WishlistBlock() {
 export function WishlistPage() {
   useTitle(t('nav.wishlist'));
   return (<>
-    <Breadcrumbs items={[['#/', t('nav.home')], [null, t('nav.wishlist')]]} />
+    <Breadcrumbs items={[['/', t('nav.home')], [null, t('nav.wishlist')]]} />
     <section className="container section-sm"><h1 className="page-title left">{t('nav.wishlist')}</h1><WishlistBlock /></section>
   </>);
 }
@@ -90,9 +92,9 @@ function Profile() {
   return (<>
     <h2 className="acc-h">{t('account.profile')}</h2>
     <div className="acc-cards">
-      <a className="acc-stat card" href="#/account/orders"><Icon name="box" /><strong>{orders.length}</strong><span>{t('account.orders')}</span></a>
-      <a className="acc-stat card" href="#/account/wishlist"><Icon name="heart" /><strong>{S.wishlist().length}</strong><span>{t('account.wishlist')}</span></a>
-      <a className="acc-stat card" href="#/account/dates"><Icon name="calendar" /><strong>{upcoming ? daysUntil(upcoming.next) : '—'}</strong><span>{upcoming ? t('dates.daysUntil', { name: upcoming.d.name }) : t('dates.noneShort')}</span></a>
+      <a className="acc-stat card" href="/account/orders"><Icon name="box" /><strong>{orders.length}</strong><span>{t('account.orders')}</span></a>
+      <a className="acc-stat card" href="/account/wishlist"><Icon name="heart" /><strong>{S.wishlist().length}</strong><span>{t('account.wishlist')}</span></a>
+      {S.feature('special_dates') && <a className="acc-stat card" href="/account/dates"><Icon name="calendar" /><strong>{upcoming ? daysUntil(upcoming.next) : '—'}</strong><span>{upcoming ? t('dates.daysUntil', { name: upcoming.d.name }) : t('dates.noneShort')}</span></a>}
     </div>
     <form className="card form-card" noValidate onSubmit={e => {
       e.preventDefault();
@@ -118,31 +120,31 @@ function Orders({ sub }) {
   const [busy, setBusy] = useState(false);
   if (sub) {
     const o = S.order(sub);
-    if (!o || !S.canViewOrder(o)) return <Empty ic="box" title={t('order.notFound')}><a className="btn btn-primary" href="#/account/orders">{t('order.back')}</a></Empty>;
+    if (!o || !S.canViewOrder(o)) return <Empty ic="box" title={t('order.notFound')}><a className="btn btn-primary" href="/account/orders">{t('order.back')}</a></Empty>;
     const buyAgain = async () => {
       setBusy(true);
       for (const i of o.items) { try { await S.addToCart(i.productId, i.sizeId, i.qty); } catch (e) { /* skip unavailable */ } }
       setBusy(false); ui.openCart(true);
     };
     return (<>
-      <a className="link-arrow back" href="#/account/orders"><Icon name="arrowRight" className="flip rot" /> {t('order.back')}</a>
+      <a className="link-arrow back" href="/account/orders"><Icon name="arrowRight" className="flip rot" /> {t('order.back')}</a>
       <div className="row-between"><h2 className="acc-h">{t('order.title', { id: o.id })}</h2>
         <Button className="btn btn-outline btn-sm" busy={busy} busyLabel={t('cart.adding')} onClick={buyAgain}><Icon name="refresh" /> {t('order.buyAgain')}</Button></div>
       <OrderDetail o={o} inAccount />
-      <p className="muted small">{t('order.help')} <a href="#/contact">{t('nav.contact')}</a></p>
+      <p className="muted small">{t('order.help')} <a href="/contact">{t('nav.contact')}</a></p>
     </>);
   }
   const orders = S.myOrders();
   return (<>
     <h2 className="acc-h">{t('account.orders')}</h2>
-    {!orders.length ? <Empty ic="box" title={t('order.noneTitle')} text={t('order.noneText')}><a className="btn btn-primary" href="#/shop/diffusers">{t('cart.startShopping')}</a></Empty> : (
+    {!orders.length ? <Empty ic="box" title={t('order.noneTitle')} text={t('order.noneText')}><a className="btn btn-primary" href="/shop/diffusers">{t('cart.startShopping')}</a></Empty> : (
       <ul className="order-list">{orders.map(o => (
         <li key={o.id} className="order-row card">
           <div className="or-thumbs">{o.items.slice(0, 3).map((i, k) => <Img key={k} k={i.img} />)}</div>
           <div className="or-info"><strong>{o.id}</strong><span className="muted small">{fmtDate(o.date)} · {t('cart.itemsN', { n: o.items.reduce((a, i) => a + i.qty, 0) })}</span></div>
           <span className={`status status-${o.status}`}>{t('status.' + o.status)}</span>
           <strong className="or-total">{money(o.totals.total)}</strong>
-          <a className="btn btn-outline btn-sm" href={`#/account/orders/${o.id}`} aria-label={t('order.viewN', { id: o.id })}>{t('order.details')}</a>
+          <a className="btn btn-outline btn-sm" href={`/account/orders/${o.id}`} aria-label={t('order.viewN', { id: o.id })}>{t('order.details')}</a>
         </li>
       ))}</ul>
     )}
@@ -273,7 +275,7 @@ function Dates() {
             <span className="small">{n === 0 ? <strong className="today">{t('dates.today')}</strong> : t('dates.inDays', { n })}{d.reminder && <> · <Icon name="bell" /> {t('dates.remind', { when: t('dates.timing.' + d.timing) })} · {t('dates.via.' + d.method)}</>}</span></div>
           <Switch checked={d.reminder} onChange={() => toggle(d)} label={t('dates.reminderFor', { name: d.name })} />
           <div className="date-acts">
-            <a className="link-btn" href="#/shop/gifts"><Icon name="gift" /> {t('dates.shopGift')}</a>
+            <a className="link-btn" href="/shop/gifts"><Icon name="gift" /> {t('dates.shopGift')}</a>
             <button className="link-btn" onClick={() => setEditing(d)} aria-label={`${t('common.edit')} — ${d.name}`}><Icon name="edit" /></button>
             <button className="link-btn danger" onClick={() => del(d)} aria-label={`${t('common.delete')} — ${d.name}`}><Icon name="trash" /></button>
           </div>
@@ -318,33 +320,34 @@ function Settings() {
       <div className="btn-row"><Button type="submit" busy={busy} busyLabel={t('common.saving')}>{t('settings.updatePw')}</Button></div>
     </form>
     <div className="card form-card"><h3 className="card-h">{t('nav.logout')}</h3><p className="muted">{t('settings.logoutD')}</p>
-      <button className="btn btn-outline" onClick={() => { S.logout(); ui.toast(t('auth.loggedOut'), 'info'); navigate('#/'); }}><Icon name="logout" /> {t('nav.logout')}</button></div>
+      <button className="btn btn-outline" onClick={() => { S.logout(); ui.toast(t('auth.loggedOut'), 'info'); navigate('/'); }}><Icon name="logout" /> {t('nav.logout')}</button></div>
   </>);
 }
 
 export default function Account({ section = 'profile', sub }) {
   const ui = useUI();
   const u = S.user();
+  const SECTIONS = sections();
   if (!SECTIONS.some(s => s[0] === section) && section !== 'logout') section = 'profile';
   useTitle(`${t('account.' + (section === 'logout' ? 'profile' : section))} — ${t('nav.account')}`);
-  const redirect = !u ? '#/login?next=' + encodeURIComponent('/account' + (section !== 'profile' ? '/' + section : '') + (sub ? '/' + sub : '')) + '&reason=account' : null;
+  const redirect = !u ? '/login?next=' + encodeURIComponent('/account' + (section !== 'profile' ? '/' + section : '') + (sub ? '/' + sub : '')) + '&reason=account' : null;
   useEffect(() => {
-    if (redirect) location.replace(location.href.split('#')[0] + redirect);
-    else if (section === 'logout') { S.logout(); ui.toast(t('auth.loggedOut'), 'info'); location.replace(location.href.split('#')[0] + '#/'); }
+    if (redirect) redirectTo(redirect);
+    else if (section === 'logout') { S.logout(); ui.toast(t('auth.loggedOut'), 'info'); redirectTo('/'); }
   }, [redirect, section]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!u || section === 'logout') return null;
 
   const Sec = { profile: Profile, orders: Orders, wishlist: WishlistSection, addresses: Addresses, dates: Dates, settings: Settings }[section];
   return (<>
-    <Breadcrumbs items={[['#/', t('nav.home')], ['#/account', t('nav.account')], [null, t('account.' + section)]]} />
+    <Breadcrumbs items={[['/', t('nav.home')], ['/account', t('nav.account')], [null, t('account.' + section)]]} />
     <section className="container account">
       <header className="acc-head"><div className="avatar" aria-hidden="true">{(u.name || u.email)[0].toUpperCase()}</div><div><p className="muted small">{t('account.hello')}</p><h1 className="page-title left sm">{u.name || u.email}</h1></div></header>
-      {!u.verified && <div className="alert alert-warn"><Icon name="mail" /><span>{t('account.unverified')}</span><a className="btn btn-sm btn-primary" href="#/verify">{t('auth.verify')}</a></div>}
+      {!u.verified && <div className="alert alert-warn"><Icon name="mail" /><span>{t('account.unverified')}</span><a className="btn btn-sm btn-primary" href="/verify">{t('auth.verify')}</a></div>}
       <div className="acc-grid">
         <nav className="acc-nav" aria-label={t('account.nav')}><ul>
-          {SECTIONS.map(([k, ic]) => <li key={k}><a href={`#/account${k === 'profile' ? '' : '/' + k}`} className={k === section ? 'on' : ''} aria-current={k === section ? 'page' : undefined}><Icon name={ic} /><span>{t('account.' + k)}</span></a></li>)}
-          {u.role === 'admin' && <li><a href="#/admin"><Icon name="dashboard" /><span>{t('admin.title')}</span></a></li>}
-          <li><button onClick={() => { S.logout(); ui.toast(t('auth.loggedOut'), 'info'); navigate('#/'); }}><Icon name="logout" /><span>{t('nav.logout')}</span></button></li>
+          {SECTIONS.map(([k, ic]) => <li key={k}><a href={`/account${k === 'profile' ? '' : '/' + k}`} className={k === section ? 'on' : ''} aria-current={k === section ? 'page' : undefined}><Icon name={ic} /><span>{t('account.' + k)}</span></a></li>)}
+          {u.role === 'admin' && <li><a href="/admin"><Icon name="dashboard" /><span>{t('admin.title')}</span></a></li>}
+          <li><button onClick={() => { S.logout(); ui.toast(t('auth.loggedOut'), 'info'); navigate('/'); }}><Icon name="logout" /><span>{t('nav.logout')}</span></button></li>
         </ul></nav>
         <div className="acc-main"><Sec sub={sub} /></div>
       </div>

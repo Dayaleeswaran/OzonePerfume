@@ -1,55 +1,84 @@
-# Ozone Scents — storefront (React + Vanilla CSS)
+# Ozone Scents — e-commerce (React + Vanilla CSS + Supabase)
 
-## Run it
-```
-npm install        # first time only
-npm run dev        # http://localhost:5173
-npm run build      # production build in dist/
-npm run preview    # serve the production build locally
-```
-`dist/` can be uploaded to any static host. URLs use `#/` routes, so no server rewrites are needed.
+Storefront and admin for Ozone Scents (Aroma Zone Scents LLC). Requirements baseline:
+`Ozone_Scents_Production_Requirements_and_Flows.md`. Implementation status, open decisions and
+launch checklist: [docs/IMPLEMENTATION_REPORT.md](docs/IMPLEMENTATION_REPORT.md).
 
-## Demo accounts
+## Architecture
+```
+Browser (Vite + React SPA, real paths: /product/tower-diffuser)
+  └─ Supabase JS (anon key only)
+       ├─ Postgres + row-level security      — catalogue, accounts, orders, coupons, reviews
+       ├─ SECURITY DEFINER functions         — create_order (prices, stock, coupons, shipping, VAT), admin actions
+       ├─ Auth (email + password, email OTP) — purchase requires a verified account
+       ├─ Storage bucket product-images      — admin uploads
+       └─ Edge Functions                     — payments-test (sandbox), send-emails (order emails)
+pg_cron: release unpaid orders (15 min), dispatch order emails (1 min)
+Hosting: Vercel (vercel.json: SPA rewrites, security headers/CSP, caching)
+```
+The browser is never trusted for prices, stock, coupon eligibility, roles or payment state.
+
+## Local development
+Requirements: Node 20+, Docker Desktop.
+```
+npm install
+npx supabase start -x studio,vector          # local Postgres/Auth/Storage/Mailpit
+npx supabase db reset                         # applies migrations + supabase/seed.sql (dev data)
+cp .env.example .env.local                    # then fill VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY from `npx supabase status`
+                                              # and set VITE_PAYMENT_PROVIDER=test for the sandbox card form
+npx supabase functions serve --env-file supabase/functions/.env
+npm run dev                                   # http://localhost:5173
+```
+`supabase/functions/.env` (git-ignored) for local use:
+```
+TEST_PAYMENTS_ENABLED=true
+ALLOWED_ORIGINS=http://localhost:5173,http://localhost:4173
+EMAIL_DISPATCH_SECRET=<random string>
+MAILPIT_URL=http://supabase_inbucket_ozone:8025
+SITE_URL=http://localhost:5173
+```
+To let pg_cron deliver order emails locally, store the same secret in Vault once:
+```sql
+select vault.create_secret('http://supabase_kong_ozone:8000', 'project_url');
+select vault.create_secret('<EMAIL_DISPATCH_SECRET>', 'email_dispatch_secret');
+```
+Emails (sign-up codes, password reset, order emails) arrive in Mailpit: http://127.0.0.1:54324
+
+### Development accounts (seed.sql — local only, never in production)
 | Role | Email | Password |
 |---|---|---|
 | Customer | demo@ozonescents.com | Demo@123 |
-| Admin | admin@ozonescents.com | Admin@123 (then go to `#/admin`) |
+| Admin | admin@ozonescents.com | Admin@123 → `/admin` |
 
-## Test payments (demo mode, no real charges)
-- `4242 4242 4242 4242`: payment succeeds
-- `4000 0000 0000 0002`: card declined
-- Any name, a future expiry, any 3-digit CVC. Crypto uses a demo address.
+Sandbox cards (only when `VITE_PAYMENT_PROVIDER=test`): `4242 4242 4242 4242` succeeds, `4000 0000 0000 0002` is declined.
+Card numbers never leave the browser; only the simulated outcome is sent.
 
-Promo codes: `WELCOME10`, `FREESHIP`.
-
-## Structure
+## Tests
 ```
-index.html              Vite entry
-public/assets/img/      diffuser (o1–o10) and oil (oil-*) photos as optimised WebP
-src/main.jsx            React root
-src/App.jsx             hash router, page shell (header/footer/panels), page transitions
-src/styles.css          all styling — plain CSS, theme tokens at the top
-src/data/catalog.js     products from the Catalogue PDFs, coupons, brand details
-src/i18n/               English / Spanish / Arabic strings
-src/lib/                store (localStorage "backend"), i18n, router, validation, search, hooks
-src/components/         Header, Footer, ProductCard, Cinematic, overlays (ui.jsx), shared pieces
-src/pages/              Home, Listing, Product, Cart, Checkout, Order, Auth, Account, Info, Admin
-legacy/                 the previous plain HTML/JS version, kept for reference
+npm run test:unit   # pricing/shipping/VAT/coupon rules, i18n coverage, content claims (no services needed)
+npm run test:db     # 28 database tests: RLS, auth-required orders, coupons, shipping, VAT, stock races, state machine, payments, email queue
+npm run test:e2e    # 14 browser journeys (needs local stack + functions + dev server; uses Edge/Chrome, set E2E_BROWSER if needed)
 ```
 
-## Before going live
-This is a complete front end, but its "server" is simulated in the browser's localStorage.
-For production you need to:
-- Replace `api()` / `src/lib/store.js` calls with a real backend (accounts, orders, stock, reviews).
-- Hash passwords server-side. The browser hash is only for the demo.
-- Use a real payment provider's hosted card fields (e.g. Stripe, Checkout.com, Telr) and a crypto gateway. The card form here only validates format.
-- Send verification, reset and special-date reminder emails from the server.
-- Confirm the brand details in `src/data/catalog.js` (taken from the Catalogue PDFs).
+## Build & deploy
+```
+npm run build       # vite build + dist/sitemap.xml (products read from the database, catalogue fallback)
+```
+Deployment steps, required secrets and the go-live checklist are in [docs/IMPLEMENTATION_REPORT.md](docs/IMPLEMENTATION_REPORT.md#12-deployment).
 
-## Catalogue notes
-- Prices and specs come from `Catalogue/`. No discounts, best-seller flags or reviews are invented:
-  Crazy Deals stays empty until a sale price is set in Admin → Products.
-- Fragrance notes are not in the catalogue, so oil pages say "coming soon"; add them in Admin → Products.
-- 10 hotel-inspired scents in the price list have no product photo yet (St. Regis, Anantara, Hilton,
-  Dubai Mall, Burj Khalifa, Kempinski, Armani, Bvlgari, Vida, Emaar). Add them in Admin once photos exist.
-- Delivery fees, returns window and gift-wrap prices are placeholders to confirm with the client.
+## Project structure
+```
+src/App.jsx                 routes, page shell, error boundary, baseline SEO
+src/lib/store.js            Supabase-backed client store (UI cache; server is authoritative)
+src/lib/pricing.js          display mirror of the server pricing rules (unit-tested)
+src/lib/router.js           path router (legacy #/ links redirect automatically)
+src/lib/seo.js              canonical, robots, Open Graph, JSON-LD
+src/components/ src/pages/  UI
+src/i18n/                   English / Spanish / Arabic
+supabase/migrations/        schema, RLS, business functions (apply in order)
+supabase/functions/         payments-test, send-emails, _shared (order helpers, email templates)
+scripts/gen-sitemap.mjs     sitemap generator
+tests/                      unit, integration (db), e2e
+vercel.json                 rewrites, security headers, caching
+legacy/                     previous static version (reference only)
+```

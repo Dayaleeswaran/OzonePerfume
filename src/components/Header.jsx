@@ -9,7 +9,7 @@ import { BRAND, LANGS, CURRENCIES, DIFFUSER_TYPES, SPACES, FAMILIES } from '../d
 
 export function Logo({ small }) {
   return (
-    <a className={`logo${small ? ' logo-sm' : ''}`} href="#/" aria-label={`${BRAND.name} — ${t('nav.home')}`}>
+    <a className={`logo${small ? ' logo-sm' : ''}`} href="/" aria-label={`${BRAND.name} — ${t('nav.home')}`}>
       <span className="logo-word">OZONE</span><span className="logo-sub">SCENTS</span>
       {!small && <span className="logo-tag">{t('brand.tagline')}</span>}
     </a>
@@ -63,14 +63,14 @@ function Mega({ kind }) {
     return (
       <div className="mega">
         <div className="mega-col"><p className="mega-h">{t('mega.byType')}</p><ul>
-          {DIFFUSER_TYPES.map(ty => <li key={ty}><a href={`#/shop/diffusers?type=${ty}`}>{t('type.' + ty + '.plural')}</a></li>)}
-          <li><a className="mega-all" href="#/shop/diffusers">{t('common.viewAll')} <Icon name="arrowRight" className="flip" /></a></li>
+          {DIFFUSER_TYPES.map(ty => <li key={ty}><a href={`/shop/diffusers?type=${ty}`}>{t('type.' + ty + '.plural')}</a></li>)}
+          <li><a className="mega-all" href="/shop/diffusers">{t('common.viewAll')} <Icon name="arrowRight" className="flip" /></a></li>
         </ul></div>
         <div className="mega-col"><p className="mega-h">{t('mega.bySpace')}</p><ul>
-          {SPACES.map(s => <li key={s}><a href={`#/shop/diffusers?space=${s}`}>{t('space.' + s)}</a></li>)}
+          {SPACES.map(s => <li key={s}><a href={`/shop/diffusers?space=${s}`}>{t('space.' + s)}</a></li>)}
         </ul></div>
         <div className="mega-feat"><p className="mega-h">{t('mega.featured')}</p><div className="mega-cards">
-          {feat.map(p => <a key={p.id} className="mega-card" href={`#/product/${p.id}`}><Img k={p.img} alt={pname(p)} /><span>{pname(p)}</span><strong>{money(p.price)}</strong></a>)}
+          {feat.map(p => <a key={p.id} className="mega-card" href={`/product/${p.id}`}><Img k={p.img} alt={pname(p)} /><span>{pname(p)}</span><strong>{money(p.price)}</strong></a>)}
         </div></div>
       </div>
     );
@@ -78,29 +78,29 @@ function Mega({ kind }) {
   return (
     <div className="mega mega-sm">
       <div className="mega-col"><p className="mega-h">{t('mega.forHome')}</p><ul>
-        <li><a href="#/shop/home-care?type=tower">{t('mega.livingRooms')}</a></li>
-        <li><a href="#/shop/home-care?type=wall">{t('mega.bedrooms')}</a></li>
-        <li><a href="#/shop/home-care?type=portable">{t('mega.desks')}</a></li>
-        <li><a className="mega-all" href="#/shop/home-care">{t('common.viewAll')} <Icon name="arrowRight" className="flip" /></a></li>
+        <li><a href="/shop/home-care?type=tower">{t('mega.livingRooms')}</a></li>
+        <li><a href="/shop/home-care?type=wall">{t('mega.bedrooms')}</a></li>
+        <li><a href="/shop/home-care?type=portable">{t('mega.desks')}</a></li>
+        <li><a className="mega-all" href="/shop/home-care">{t('common.viewAll')} <Icon name="arrowRight" className="flip" /></a></li>
       </ul></div>
       <div className="mega-col"><p className="mega-h">{t('mega.byScent')}</p><ul>
-        {FAMILIES.map(f => <li key={f}><a href={`#/shop/oils?family=${f}`}>{t('family.' + f)}</a></li>)}
+        {FAMILIES.map(f => <li key={f}><a href={`/shop/oils?family=${f}`}>{t('family.' + f)}</a></li>)}
       </ul></div>
     </div>
   );
 }
 
 const NAV = [
-  { key: 'home', href: '#/' },
-  { key: 'diffusers', href: '#/shop/diffusers', mega: 'diffusers' },
-  { key: 'aromaDeals', href: '#/deals/aroma', accent: true },
-  { key: 'crazyDeals', href: '#/deals/crazy', spark: true },
-  { key: 'homeCare', href: '#/shop/home-care', mega: 'home' },
-  { key: 'about', href: '#/about' },
-  { key: 'contact', href: '#/contact' }
+  { key: 'home', href: '/' },
+  { key: 'diffusers', href: '/shop/diffusers', mega: 'diffusers' },
+  { key: 'aromaDeals', href: '/deals/aroma', accent: true },
+  { key: 'crazyDeals', href: '/deals/crazy', spark: true },
+  { key: 'homeCare', href: '/shop/home-care', mega: 'home' },
+  { key: 'about', href: '/about' },
+  { key: 'contact', href: '/contact' }
 ];
 
-export const isActive = (href, hash) => href === '#/' ? (hash === '#/' || hash === '' || hash === '#') : hash.split('?')[0].startsWith(href);
+export const isActive = (href, path) => href === '/' ? path === '/' : path.split('?')[0].startsWith(href.split('?')[0]);
 
 function Count({ n }) {
   return <span key={n} className={`badge-count${n ? ' show pop' : ''}`}>{n || ''}</span>;
@@ -146,8 +146,8 @@ export default function Header({ hash }) {
             {localeOpen && <div className="locale-pop" id="locale-pop"><LocaleControls ctx="pop" /></div>}
           </div>
           <div className="hdr-icons">
-            <a className="icon-btn" href={u ? (u.role === 'admin' ? '#/admin' : '#/account') : '#/login'} aria-label={u ? t('nav.account') : t('nav.login')}><Icon name="user" />{u && <span className="dot" aria-hidden="true" />}</a>
-            <a className="icon-btn" href="#/wishlist" aria-label={t('a11y.wishCount', { n: wishN })}><Icon name="heart" /><Count n={wishN} /></a>
+            <a className="icon-btn" href={u ? (u.role === 'admin' ? '/admin' : '/account') : '/login'} aria-label={u ? t('nav.account') : t('nav.login')}><Icon name="user" />{u && <span className="dot" aria-hidden="true" />}</a>
+            <a className="icon-btn" href="/wishlist" aria-label={t('a11y.wishCount', { n: wishN })}><Icon name="heart" /><Count n={wishN} /></a>
             <button className="icon-btn" data-action="open-cart" onClick={() => ui.openCart()} aria-label={t('a11y.cartCount', { n: cartN })} aria-haspopup="dialog"><Icon name="bag" /><Count n={cartN} /></button>
           </div>
         </div>

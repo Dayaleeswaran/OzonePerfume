@@ -22,24 +22,24 @@ function MobileMenu({ onClose }) {
   return (
     <Overlay kind="drawer-start" title={<Logo small />} className="mnav-ov" onClose={onClose}>
       {close => (
-        <div onClick={e => { if (e.target.closest('a[href^="#/"]')) close(); }}>
+        <div onClick={e => { if (e.target.closest('a[href^="/"]')) close(); }}>
           <nav className="mnav" aria-label={t('a11y.mainNav')}>
-            <a href="#/">{t('nav.home')}</a>
-            <details><summary>{t('nav.diffusers')}<Icon name="chevDown" /></summary>{sub([['#/shop/diffusers', t('common.viewAll')]].concat(DIFFUSER_TYPES.map(ty => ['#/shop/diffusers?type=' + ty, t('type.' + ty + '.plural')])))}</details>
-            <a href="#/deals/aroma" className="accent">{t('nav.aromaDeals')}</a>
-            <a href="#/deals/crazy">{t('nav.crazyDeals')} <Icon name="flame" className="spark" /></a>
-            <details><summary>{t('nav.homeCare')}<Icon name="chevDown" /></summary>{sub([['#/shop/home-care', t('common.viewAll')], ['#/shop/home-care?type=tower', t('mega.livingRooms')], ['#/shop/home-care?type=wall', t('mega.bedrooms')], ['#/shop/home-care?type=portable', t('mega.desks')]])}</details>
-            <a href="#/shop/gifts">{t('nav.gifts')}</a>
-            <a href="#/about">{t('nav.about')}</a>
-            <a href="#/contact">{t('nav.contact')}</a>
+            <a href="/">{t('nav.home')}</a>
+            <details><summary>{t('nav.diffusers')}<Icon name="chevDown" /></summary>{sub([['/shop/diffusers', t('common.viewAll')]].concat(DIFFUSER_TYPES.map(ty => ['/shop/diffusers?type=' + ty, t('type.' + ty + '.plural')])))}</details>
+            <a href="/deals/aroma" className="accent">{t('nav.aromaDeals')}</a>
+            <a href="/deals/crazy">{t('nav.crazyDeals')} <Icon name="flame" className="spark" /></a>
+            <details><summary>{t('nav.homeCare')}<Icon name="chevDown" /></summary>{sub([['/shop/home-care', t('common.viewAll')], ['/shop/home-care?type=tower', t('mega.livingRooms')], ['/shop/home-care?type=wall', t('mega.bedrooms')], ['/shop/home-care?type=portable', t('mega.desks')]])}</details>
+            <a href="/shop/gifts">{t('nav.gifts')}</a>
+            <a href="/about">{t('nav.about')}</a>
+            <a href="/contact">{t('nav.contact')}</a>
           </nav>
           <div className="mnav-acc">
-            {u ? <a className="btn btn-outline btn-block" href={u.role === 'admin' ? '#/admin' : '#/account'}><Icon name="user" /> {t('nav.account')}</a>
-              : <><a className="btn btn-primary btn-block" href="#/login">{t('nav.login')}</a><a className="btn btn-outline btn-block" href="#/register">{t('auth.createAccount')}</a></>}
+            {u ? <a className="btn btn-outline btn-block" href={u.role === 'admin' ? '/admin' : '/account'}><Icon name="user" /> {t('nav.account')}</a>
+              : <><a className="btn btn-primary btn-block" href="/login">{t('nav.login')}</a><a className="btn btn-outline btn-block" href="/register">{t('auth.createAccount')}</a></>}
             <div className="mnav-links">
-              <a href="#/wishlist"><Icon name="heart" /> {t('nav.wishlist')}</a>
-              <a href="#/account/orders"><Icon name="box" /> {t('account.orders')}</a>
-              <a href="#/account/dates"><Icon name="calendar" /> {t('account.dates')}</a>
+              <a href="/wishlist"><Icon name="heart" /> {t('nav.wishlist')}</a>
+              <a href="/account/orders"><Icon name="box" /> {t('account.orders')}</a>
+              <a href="/account/dates"><Icon name="calendar" /> {t('account.dates')}</a>
             </div>
           </div>
           <div className="mnav-locale"><LocaleControls ctx="m" /></div>
@@ -72,8 +72,8 @@ function SearchPanel({ initial, onClose }) {
   return (
     <Overlay kind="search" title={null} labelledBy="search-label" className="search-ov" onClose={onClose}>
       {close => (
-        <div className="container search-box" onClick={e => { if (e.target.closest('a[href^="#/"]')) close(); }}>
-          <form className="search-form" role="search" onSubmit={e => { e.preventDefault(); if (q.trim()) { navigate('#/search?q=' + encodeURIComponent(q.trim())); close(); } }}>
+        <div className="container search-box" onClick={e => { if (e.target.closest('a[href^="/"]')) close(); }}>
+          <form className="search-form" role="search" onSubmit={e => { e.preventDefault(); if (q.trim()) { navigate('/search?q=' + encodeURIComponent(q.trim())); close(); } }}>
             <label id="search-label" htmlFor="search-input" className="sr-only">{t('search.label')}</label>
             <Icon name="search" />
             <input id="search-input" type="search" name="q" autoComplete="off" placeholder={t('search.placeholder')} value={q} onChange={e => setQ(e.target.value)} autoFocus aria-controls="search-results" aria-describedby="search-status" />
@@ -91,7 +91,7 @@ function SearchPanel({ initial, onClose }) {
             {res.state === 'error' && <Alert>{errorText(res.err)}</Alert>}
             {res.state === 'done' && (res.items.length ? (<>
               <div className="search-grid">{res.items.slice(0, 6).map(p => <MiniCard key={p.id} p={p} />)}</div>
-              <a className="btn btn-primary" href={'#/search?q=' + encodeURIComponent(q)}>{t('search.viewAll', { n: res.items.length })} <Icon name="arrowRight" className="flip" /></a>
+              <a className="btn btn-primary" href={'/search?q=' + encodeURIComponent(q)}>{t('search.viewAll', { n: res.items.length })} <Icon name="arrowRight" className="flip" /></a>
             </>) : (
               <div className="empty compact"><Icon name="search" className="empty-ic" /><h3>{t('search.noResults', { q })}</h3><p>{t('search.noResultsHint')}</p>{chips(POPULAR.slice(0, 4))}</div>
             ))}
@@ -105,6 +105,7 @@ function SearchPanel({ initial, onClose }) {
 /* ---------------- cart pieces (also used by the cart page) ---------------- */
 export function FreeShipBar({ tt }) {
   const th = S.settings().freeShippingThreshold;
+  if (!tt.freeShip && !tt.toFree) return null;   // no free-shipping rule for this destination
   const pct = tt.freeShip ? 100 : Math.min(100, Math.round((1 - tt.toFree / th) * 100));
   return (
     <div className="ship-bar" aria-live="polite">
@@ -123,9 +124,9 @@ export function CartLines({ lines, compact }) {
         const p = v.product, l = v.line;
         return (
           <li key={l.id} className={`cline${leaving === l.id ? ' leaving' : ''}`} data-line={l.id}>
-            <a href={`#/product/${p.id}`} className="cline-img"><Img k={p.img} /></a>
+            <a href={`/product/${p.id}`} className="cline-img"><Img k={p.img} /></a>
             <div className="cline-body">
-              <a className="cline-name" href={`#/product/${p.id}`}>{pname(p)}</a>
+              <a className="cline-name" href={`/product/${p.id}`}>{pname(p)}</a>
               <p className="cline-meta">{t('type.' + p.type)} · {t('size.ml', { n: v.size.ml })}</p>
               {l.gift && <p className="cline-gift"><Icon name="gift" /> {t('gift.for', { name: l.gift.recipientName })} · {t('gift.wrap.' + l.gift.wrap)}</p>}
               <p className="cline-price"><strong>{money(v.price)}</strong>{v.compare > v.price && <> <s>{money(v.compare)}</s></>}</p>
@@ -147,12 +148,12 @@ function CartDrawer({ justAdded, onClose }) {
   const tt = S.totals();
   return (
     <Overlay kind="drawer-end" title={<>{t('cart.title')} <span className="muted">({S.cartCount()})</span></>} className="cart-ov" onClose={onClose}>
-      {close => (<div onClick={e => { if (e.target.closest('a[href^="#/"]')) close(); }} style={{ display: 'contents' }}>
+      {close => (<div onClick={e => { if (e.target.closest('a[href^="/"]')) close(); }} style={{ display: 'contents' }}>
         {justAdded && <Alert type="success" className="added-note">{t('cart.added')}</Alert>}
         {!tt.lines.length ? (
           <Empty ic="bag" title={t('cart.emptyTitle')} text={t('cart.emptyText')}>
-            <a className="btn btn-primary" href="#/shop/diffusers">{t('cart.startShopping')}</a>
-            <a className="btn btn-outline" href="#/deals/aroma">{t('home.oilsTitle')}</a>
+            <a className="btn btn-primary" href="/shop/diffusers">{t('cart.startShopping')}</a>
+            <a className="btn btn-outline" href="/deals/aroma">{t('home.oilsTitle')}</a>
           </Empty>
         ) : (<>
           <FreeShipBar tt={tt} />
@@ -160,8 +161,8 @@ function CartDrawer({ justAdded, onClose }) {
           <div className="drawer-foot">
             {tt.savings > 0 && <p className="row save"><span>{t('cart.youSave')}</span><span>{money(tt.savings)}</span></p>}
             <p className="row big"><span>{t('cart.subtotal')}</span><strong>{money(tt.subtotal)}</strong></p>
-            <p className="muted small">{t('cart.vatIncl')} · {t('cart.shipAtCheckout')}</p>
-            <div className="btn-row"><a className="btn btn-outline" href="#/cart">{t('cart.viewCart')}</a><a className="btn btn-primary" href="#/checkout">{t('cart.checkout')} <Icon name="lock" /></a></div>
+            <p className="muted small">{t(S.settings().taxMode === 'exclusive' ? 'cart.vatExcl' : 'cart.vatIncl')} · {t('cart.shipAtCheckout')}</p>
+            <div className="btn-row"><a className="btn btn-outline" href="/cart">{t('cart.viewCart')}</a><a className="btn btn-primary" href="/checkout">{t('cart.checkout')} <Icon name="lock" /></a></div>
           </div>
         </>)}
       </div>)}
@@ -199,7 +200,7 @@ function GiftModal({ productId, sizeId, qty = 1, lineId, onClose }) {
           (lineId ? S.setLineGift(lineId, gift) : S.addToCart(productId, sizeId, qty, gift)).then(() => {
             close();
             ui.toast(lineId ? t('gift.updated') : t('gift.added', { name: gift.recipientName }), 'success');
-            if (!lineId) navigate('#/cart');
+            if (!lineId) navigate('/cart');
           }).catch(err => { setBusy(false); f.setAlert({ type: 'error', msg: errorText(err) }); });
         }}>
           {f.alert && <Alert type={f.alert.type}>{f.alert.msg}</Alert>}

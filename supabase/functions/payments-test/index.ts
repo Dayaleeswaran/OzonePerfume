@@ -1,29 +1,17 @@
-/* Test payment provider — stands in for the real gateway until the client picks one.
+/* Test payment provider — stands in for the real gateway until the client picks one (OD-001).
 
-   It is OFF unless the server secret TEST_PAYMENTS_ENABLED=true is set, so it can never take
-   "payments" in production by accident. Card details are never sent here (nor anywhere we host):
-   the browser only sends the order id, its secret access token and the simulated outcome.
+   OFF unless the server secret TEST_PAYMENTS_ENABLED=true is set, so it can never take "payments" in
+   production (DEP-003, INT-PAY-007). Card details are never sent here: the browser sends only the
+   order id, its secret token and the simulated outcome, and the caller must be the signed-in owner.
 
-   The real gateway will replace this with: create-payment-session (redirect / hosted fields) +
-   a signature-verified webhook calling the same mark_order_paid / mark_order_failed functions. */
-import { createClient } from 'npm:@supabase/supabase-js@2';
+   The real gateway replaces this with: create-payment-session (hosted page / tokenized fields) and a
+   signature-verified webhook that calls the same markPaid()/markCancelled() helpers. */
+import { ORDER_ID_RE, UUID_RE, corsHeaders, serviceClient, requestUser, orderForCustomer, markPaid, markCancelled } from '../_shared/orders.ts';
 
-const ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? 'http://localhost:5173,http://localhost:4173').split(',').map(s => s.trim());
-const ID_RE = /^OZ\d{6,12}$/;
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const OUTCOMES = ['success', 'declined', 'insufficient', 'cancel'];
 
-function cors(origin: string | null) {
-  return {
-    'Access-Control-Allow-Origin': origin && ORIGINS.includes(origin) ? origin : ORIGINS[0],
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Vary': 'Origin'
-  };
-}
-
 Deno.serve(async req => {
-  const headers = { ...cors(req.headers.get('origin')), 'Content-Type': 'application/json' };
+  const headers = { ...corsHeaders(req), 'Content-Type': 'application/json' };
   const reply = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers });
 
   if (req.method === 'OPTIONS') return new Response('ok', { headers });
@@ -33,31 +21,24 @@ Deno.serve(async req => {
   let body: { order_id?: unknown; token?: unknown; outcome?: unknown };
   try { body = await req.json(); } catch { return reply(400, { error: 'invalidInput' }); }
   const { order_id, token, outcome } = body;
-  if (typeof order_id !== 'string' || !ID_RE.test(order_id) || typeof token !== 'string' || !UUID_RE.test(token)
+  if (typeof order_id !== 'string' || !ORDER_ID_RE.test(order_id) || typeof token !== 'string' || !UUID_RE.test(token)
     || typeof outcome !== 'string' || !OUTCOMES.includes(outcome)) return reply(400, { error: 'invalidInput' });
 
-  const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false } });
-  const { data: order, error } = await admin.from('orders')
-    .select('id, total, currency, access_token, status, payment_status').eq('id', order_id).maybeSingle();
-  if (error) return reply(500, { error: 'unknown' });
-  /* Same response for "no such order" and "wrong token" so ids can't be probed */
-  if (!order || order.access_token !== token) return reply(404, { error: 'orderNotFound' });
-  if (order.payment_status === 'paid') return reply(200, { status: 'paid' });
-  if (order.status !== 'awaiting_payment') return reply(409, { error: 'invalidState' });
+  try {
+    const admin = serviceClient();
+    const user = await requestUser(admin, req);
+    if (!user) return reply(401, { error: 'authRequired' });
+    const order = await orderForCustomer(admin, order_id, token, user.id);
+    if (!order) return reply(404, { error: 'orderNotFound' });
+    if (order.payment_status === 'paid') return reply(200, { status: 'paid' });
+    if (order.status !== 'awaiting_payment') return reply(409, { error: 'invalidState' });
 
-  if (outcome === 'success') {
-    /* amount and currency come from the database row, never from the browser */
-    const { error: e } = await admin.rpc('mark_order_paid', {
-      p_id: order.id, p_provider: 'test', p_ref: 'test_' + crypto.randomUUID(), p_amount: order.total, p_currency: order.currency
-    });
-    if (e) return reply(500, { error: 'unknown' });
-    return reply(200, { status: 'paid' });
+    if (outcome === 'success') { await markPaid(admin, order, 'test', 'test_' + crypto.randomUUID()); return reply(200, { status: 'paid' }); }
+    if (outcome === 'cancel') { await markCancelled(admin, order); return reply(200, { status: 'cancelled' }); }
+    /* a declined attempt leaves the order awaiting payment so the customer can retry (FLOW-E2E-002) */
+    return reply(200, { status: outcome });
+  } catch (e) {
+    console.error('payments-test', order_id, (e as Error).message);   // OBS-003: safe identifiers only
+    return reply(500, { error: 'unknown' });
   }
-  if (outcome === 'cancel') {
-    const { error: e } = await admin.rpc('mark_order_failed', { p_id: order.id, p_status: 'cancelled' });
-    if (e) return reply(500, { error: 'unknown' });
-    return reply(200, { status: 'cancelled' });
-  }
-  /* A declined attempt leaves the order awaiting payment so the shopper can retry */
-  return reply(200, { status: outcome });
 });

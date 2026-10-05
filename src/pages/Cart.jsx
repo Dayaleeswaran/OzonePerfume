@@ -9,6 +9,18 @@ import { t } from '../lib/i18n.js';
 import { money, errorText } from '../lib/format.js';
 import { useTitle } from '../lib/router.js';
 
+/* VAT presentation follows the configured tax mode (OD-003): added before the total, or included in it */
+export function VatRows({ taxMode, vat, total }) {
+  const rate = S.settings().vatRate;
+  return taxMode === 'exclusive' ? (<>
+    <div className="vat-add"><dt>{t('cart.vatAdded', { rate })}</dt><dd>{money(vat)}</dd></div>
+    <div className="total"><dt>{t('cart.total')}</dt><dd>{money(total)}</dd></div>
+  </>) : (<>
+    <div className="total"><dt>{t('cart.total')}</dt><dd>{money(total)}</dd></div>
+    <div className="vat"><dt>{t('cart.vatLine', { rate })}</dt><dd>{money(vat)}</dd></div>
+  </>);
+}
+
 export function SummaryRows({ tt, estimated = true }) {
   return (
     <dl className="sum-rows">
@@ -16,9 +28,8 @@ export function SummaryRows({ tt, estimated = true }) {
       {tt.savings > 0 && <div className="save"><dt>{t('cart.youSave')}</dt><dd>{money(tt.savings)}</dd></div>}
       {tt.discount > 0 && <div className="disc"><dt>{t('cart.coupon')} <span className="code">{tt.coupon.code}</span></dt><dd>− {money(tt.discount)}</dd></div>}
       {tt.giftFee > 0 && <div><dt>{t('cart.giftFee')}</dt><dd>{money(tt.giftFee)}</dd></div>}
-      <div><dt>{t(estimated ? 'cart.shippingEst' : 'cart.shipping')}</dt><dd>{tt.shipping ? money(tt.shipping) : <span className="free">{t('common.free')}</span>}</dd></div>
-      <div className="total"><dt>{t('cart.total')}</dt><dd>{money(tt.total)}</dd></div>
-      <div className="vat"><dt>{t('cart.vatLine', { rate: S.settings().vatRate })}</dt><dd>{money(tt.vat)}</dd></div>
+      <div><dt>{t(estimated ? 'cart.shippingEst' : 'cart.shipping')}</dt><dd>{!tt.shippingAvailable ? '—' : tt.shipping ? money(tt.shipping) : <span className="free">{t('common.free')}</span>}</dd></div>
+      <VatRows taxMode={tt.taxMode} vat={tt.vat} total={tt.total} />
     </dl>
   );
 }
@@ -57,13 +68,13 @@ export default function Cart() {
   const hasOut = tt.lines.some(v => v.product.stock < v.line.qty);
   const recs = S.collection('signature').filter(p => !S.cart().some(l => l.productId === p.id));
   return (<>
-    <Breadcrumbs items={[['#/', t('nav.home')], [null, t('cart.title')]]} />
+    <Breadcrumbs items={[['/', t('nav.home')], [null, t('cart.title')]]} />
     <section className="container cart-page">
       <h1 className="page-title left">{t('cart.title')}</h1>
       {!tt.lines.length ? (
         <Empty ic="bag" title={t('cart.emptyTitle')} text={t('cart.emptyText')}>
-          <a className="btn btn-primary" href="#/shop/diffusers">{t('cart.startShopping')}</a>
-          <a className="btn btn-outline" href="#/wishlist"><Icon name="heart" /> {t('nav.wishlist')}</a>
+          <a className="btn btn-primary" href="/shop/diffusers">{t('cart.startShopping')}</a>
+          <a className="btn btn-outline" href="/wishlist"><Icon name="heart" /> {t('nav.wishlist')}</a>
         </Empty>
       ) : (
         <div className="cart-grid">
@@ -71,14 +82,14 @@ export default function Cart() {
             <FreeShipBar tt={tt} />
             {hasOut && <Alert>{t('cart.stockIssue')}</Alert>}
             <CartLines lines={tt.lines} />
-            <a className="link-arrow back" href="#/shop/diffusers"><Icon name="arrowRight" className="flip rot" /> {t('cart.continue')}</a>
+            <a className="link-arrow back" href="/shop/diffusers"><Icon name="arrowRight" className="flip rot" /> {t('cart.continue')}</a>
           </div>
           <aside className="summary card" aria-labelledby="sum-h">
             <h2 id="sum-h" className="sum-h">{t('cart.summary')}</h2>
             <CouponBox tt={tt} />
             <SummaryRows tt={tt} />
-            <a className={`btn btn-primary btn-block btn-lg${hasOut ? ' disabled' : ''}`} href="#/checkout" aria-disabled={hasOut || undefined} tabIndex={hasOut ? -1 : undefined}><Icon name="lock" /> {t('cart.checkout')}</a>
-            <a className="btn btn-ghost btn-block" href="#/shop/diffusers">{t('cart.continue')}</a>
+            <a className={`btn btn-primary btn-block btn-lg${hasOut ? ' disabled' : ''}`} href="/checkout" aria-disabled={hasOut || undefined} tabIndex={hasOut ? -1 : undefined}><Icon name="lock" /> {t('cart.checkout')}</a>
+            <a className="btn btn-ghost btn-block" href="/shop/diffusers">{t('cart.continue')}</a>
             <div className="sum-trust"><PayMarks /><p className="muted small"><Icon name="shield" /> {t('cart.secure')}</p></div>
           </aside>
         </div>

@@ -422,3 +422,11 @@ content_path = "./supabase/templates/confirmation.html"
 [auth.email.template.recovery]
 subject = "Your Ozone Scents password reset code"
 content_path = "./supabase/templates/recovery.html"
+
+# Email dispatcher: called by pg_cron with the x-dispatch-secret header, not by browsers
+[functions.send-emails]
+verify_jwt = false
+
+# Stripe calls this with its own signature header (verified in code), not a Supabase JWT
+[functions.stripe-webhook]
+verify_jwt = false

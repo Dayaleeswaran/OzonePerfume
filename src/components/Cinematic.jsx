@@ -8,11 +8,11 @@ import { t } from '../lib/i18n.js';
 import { reducedMotion, debounce } from '../lib/format.js';
 
 const CHAPTERS = [
-  { key: 'c1', frames: ['o1', 'o8'], href: '#/product/tower-pro-diffuser' },
-  { key: 'c2', frames: ['o3', 'o10'], href: '#/shop/home-care' },
-  { key: 'c3', frames: ['o4', 'o6'], href: '#/shop/diffusers?type=hvac' },
-  { key: 'c4', frames: ['oil-ozone-scent', 'oil-blue-water'], href: '#/deals/aroma' },
-  { key: 'c5', frames: ['oil-velvet-bloom-2', 'oil-candle-light-2'], href: '#/shop/gifts' }
+  { key: 'c1', frames: ['o1', 'o8'], href: '/product/tower-pro-diffuser' },
+  { key: 'c2', frames: ['o3', 'o10'], href: '/shop/home-care' },
+  { key: 'c3', frames: ['o4', 'o6'], href: '/shop/diffusers?type=hvac' },
+  { key: 'c4', frames: ['oil-ozone-scent', 'oil-blue-water'], href: '/deals/aroma' },
+  { key: 'c5', frames: ['oil-velvet-bloom-2', 'oil-candle-light-2'], href: '/shop/gifts' }
 ];
 const FRAMES = CHAPTERS.flatMap(c => c.frames);
 
@@ -29,7 +29,7 @@ export default function Cinematic() {
     if (!ctx) return;
     let target = 0, current = 0, raf = 0, visible = false, W = 0, H = 0, lastCh = -1, lastHint = null, dead = false;
     const small = window.innerWidth < 900;
-    const imgs = FRAMES.map(k => { const im = new Image(); im.decoding = 'async'; im.src = `assets/img/${k}${small ? '-sm' : ''}.webp`; return im; });
+    const imgs = FRAMES.map(k => { const im = new Image(); im.decoding = 'async'; im.src = `/assets/img/${k}${small ? '-sm' : ''}.webp`; return im; });
     let ready = 0;
     const onReady = () => { if (dead) return; ready++; if (ready >= 2) setLoaded(true); draw(true); };
     imgs.forEach(im => { if (im.complete && im.naturalWidth) queueMicrotask(onReady); else { im.onload = onReady; im.onerror = onReady; } });
@@ -38,12 +38,44 @@ export default function Cinematic() {
     const range = () => track.offsetHeight - window.innerHeight + hdr();
     const progress = () => { const r = track.getBoundingClientRect(), total = range(); return total > 0 ? Math.min(1, Math.max(0, (hdr() - r.top) / total)) : 0; };
     const ease = x => x * x * (3 - 2 * x);
-    const cover = (im, zoom, panX, alpha) => {
+    /* Each frame = a soft blurred backdrop (the photo scaled down to 48px, then stretched to cover) plus the
+       WHOLE photo drawn uncropped on top. Photos of any shape therefore fit the frame on every screen. */
+    const blurs = [];
+    const blurred = k => {
+      const im = imgs[k];
+      if (!blurs[k] && im && im.naturalWidth) {
+        const c = document.createElement('canvas');
+        c.width = 48; c.height = Math.max(1, Math.round(48 * im.naturalHeight / im.naturalWidth));
+        c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+        blurs[k] = c;
+      }
+      return blurs[k];
+    };
+    const frame = (k, zoom, panX, alpha) => {
+      const im = imgs[k];
       if (!im || !im.naturalWidth) return;
-      const s = Math.max(W / im.naturalWidth, H / im.naturalHeight) * zoom;
-      const w = im.naturalWidth * s, h = im.naturalHeight * s;
       ctx.globalAlpha = alpha;
-      ctx.drawImage(im, (W - w) / 2 + panX, (H - h) / 2, w, h);
+      const bg = blurred(k);
+      if (bg) {
+        const s = Math.max(W / bg.width, H / bg.height) * 1.08;
+        ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(bg, (W - bg.width * s) / 2, (H - bg.height * s) / 2, bg.width * s, bg.height * s);
+      }
+      /* wide screens: keep the photo right of the chapter text; narrow screens: centred */
+      const wide = W > 900 && W / H > 1.2;
+      const boxW = W * (wide ? 0.6 : 0.94), boxH = H * (wide ? 0.86 : 0.7);
+      const cx = wide ? W * 0.67 : W / 2, cy = wide ? H / 2 : H * 0.4;
+      const s = Math.min(boxW / im.naturalWidth, boxH / im.naturalHeight) * zoom;
+      const w = im.naturalWidth * s, h = im.naturalHeight * s;
+      const x = cx - w / 2 + panX, y = cy - h / 2, r = Math.min(22, w * 0.03);
+      ctx.save();
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h);
+      ctx.shadowColor = 'rgba(0,0,0,.4)'; ctx.shadowBlur = 40; ctx.fillStyle = '#0B0B0B'; ctx.fill();   // soft drop shadow
+      ctx.shadowBlur = 0; ctx.shadowColor = 'transparent';
+      ctx.clip();
+      ctx.drawImage(im, x, y, w, h);
+      ctx.restore();
     };
     function draw(force) {
       const f = current * (FRAMES.length - 1);
@@ -51,9 +83,9 @@ export default function Cinematic() {
       const local = f - i;
       const mix = ease(Math.min(1, Math.max(0, (local - 0.62) / 0.3)));
       ctx.globalAlpha = 1; ctx.fillStyle = '#0B0B0B'; ctx.fillRect(0, 0, W, H);
-      const drift = W < 700 ? 10 : 24;
-      cover(imgs[i], 1.06 + local * 0.08, -local * drift, 1);
-      if (mix > 0.001) cover(imgs[i + 1], 1.14 - (1 - local) * 0.08 + 0.02, (1 - local) * drift, mix);
+      const drift = W < 700 ? 6 : 14;
+      frame(i, 1 + local * 0.04, -local * drift, 1);
+      if (mix > 0.001) frame(i + 1, 1.04 - (1 - local) * 0.04, (1 - local) * drift, mix);
       ctx.globalAlpha = 1;
       const ch = Math.min(CHAPTERS.length - 1, Math.floor(current * CHAPTERS.length * 0.9999));
       if (ch !== lastCh || force) { lastCh = ch; setActive(ch); }

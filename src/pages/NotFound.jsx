@@ -3,14 +3,16 @@ import { Empty } from '../components/common.jsx';
 import { useUI } from '../components/ui.jsx';
 import { t } from '../lib/i18n.js';
 import { useTitle } from '../lib/router.js';
+import { useSeo } from '../lib/seo.js';
 
 export default function NotFound({ msg }) {
   const ui = useUI();
   useTitle(msg || t('nf.title'));
+  useSeo({ path: location.pathname, notFound: true }, []);
   return (
     <section className="container section">
       <Empty ic="search" title={msg || t('nf.title')} text={t('nf.text')}>
-        <a className="btn btn-primary" href="#/">{t('nav.home')}</a>
+        <a className="btn btn-primary" href="/">{t('nav.home')}</a>
         <button className="btn btn-outline" onClick={() => ui.openSearch()}><Icon name="search" /> {t('search.open')}</button>
       </Empty>
     </section>

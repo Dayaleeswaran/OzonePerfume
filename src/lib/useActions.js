@@ -18,8 +18,8 @@ export function useShopActions() {
   const toggleWish = useCallback(p =>
     S.toggleWishlist(p.id).then(added => {
       const name = pname(p);
-      if (added && !S.user()) ui.toast(t('wish.addedGuest', { name }), 'info', { label: t('nav.login'), href: '#/login?next=%2Fwishlist&reason=wishlist' });
-      else ui.toast(t(added ? 'wish.added' : 'wish.removed', { name }), added ? 'success' : 'info', added ? { label: t('wish.view'), href: '#/wishlist' } : null);
+      if (added && !S.user()) ui.toast(t('wish.addedGuest', { name }), 'info', { label: t('nav.login'), href: '/login?next=%2Fwishlist&reason=wishlist' });
+      else ui.toast(t(added ? 'wish.added' : 'wish.removed', { name }), added ? 'success' : 'info', added ? { label: t('wish.view'), href: '/wishlist' } : null);
     }).catch(err => ui.toast(errorText(err), 'error')), [ui]);
 
   const updateQty = useCallback((line, qty) => {

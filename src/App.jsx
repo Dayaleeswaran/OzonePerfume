@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useLayoutEffect, useRef } from 'react';
+import { Component, lazy, Suspense, useEffect, useLayoutEffect, useRef } from 'react';
 import Header from './components/Header.jsx';
 import Footer from './components/Footer.jsx';
 import Panels from './components/Panels.jsx';
@@ -17,10 +17,30 @@ import { About, Contact, Policy } from './pages/Info.jsx';
 const Admin = lazy(() => import('./pages/Admin.jsx'));
 import NotFound from './pages/NotFound.jsx';
 import { useStore } from './lib/useStore.js';
-import { useHashRoute } from './lib/router.js';
+import { useRoute, handleLinkClick } from './lib/router.js';
 import { S } from './lib/store.js';
 import { t } from './lib/i18n.js';
 import { reducedMotion } from './lib/format.js';
+import { applySeo } from './lib/seo.js';
+import { reportError, installGlobalHandlers } from './lib/monitor.js';
+
+installGlobalHandlers();
+
+/* A crash in one page must not take down the whole site (NFR-REL-005): show a recovery screen instead */
+class PageBoundary extends Component {
+  constructor(props) { super(props); this.state = { failed: false }; }
+  static getDerivedStateFromError() { return { failed: true }; }
+  componentDidCatch(error, info) { reportError(error, { where: 'render', component: String(info.componentStack || '').trim().split(/\s*\n\s*/)[0] }); }
+  render() {
+    if (!this.state.failed) return this.props.children;
+    return (
+      <section className="container section" role="alert">
+        <div className="empty"><h1 className="page-title">{t('err.pageTitle')}</h1><p className="muted">{t('err.pageText')}</p>
+          <div className="btn-row center"><button className="btn btn-primary" onClick={() => location.reload()}>{t('common.retry')}</button><a className="btn btn-outline" href="/">{t('nav.home')}</a></div></div>
+      </section>
+    );
+  }
+}
 import { LANGS } from './data/catalog.js';
 
 /* Map the hash route to a page element and a shell mode */
@@ -59,7 +79,10 @@ function useReveal(root) {
       return () => mo.disconnect();
     }
     const io = new IntersectionObserver(entries => entries.forEach(en => { if (en.isIntersecting) { en.target.classList.add('in'); io.unobserve(en.target); } }), { rootMargin: '0px 0px -8% 0px', threshold: 0.05 });
-    const scan = () => el.querySelectorAll('.reveal:not(.in):not([data-rv])').forEach(n => { n.dataset.rv = '1'; io.observe(n); });
+    /* Track watched elements per observer (not with a DOM flag): if the effect is torn down and re-run
+       (React Strict Mode, remounts), the new observer must pick every element up again or it stays invisible. */
+    const watched = new WeakSet();
+    const scan = () => el.querySelectorAll('.reveal:not(.in)').forEach(n => { if (!watched.has(n)) { watched.add(n); io.observe(n); } });
     scan();
     const mo = new MutationObserver(scan);
     mo.observe(el, { childList: true, subtree: true });
@@ -70,12 +93,14 @@ function useReveal(root) {
 function Shell() {
   useStore();
   const ui = useUI();
-  const route = useHashRoute();
+  const route = useRoute();
   const [page, mode = 'full'] = resolve(route);
   const mainRef = useRef(null);
   const lastPath = useRef(null);
   const lang = S.session.lang;
   useReveal(mainRef);
+  /* baseline SEO for every route (pages refine it with useSeo, which runs after this layout effect) */
+  useLayoutEffect(() => { applySeo({ path: route.path, description: t('meta.desc') }); }, [route.path, lang]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useLayoutEffect(() => {
     document.documentElement.lang = lang;
@@ -129,7 +154,7 @@ function Shell() {
     const offline = () => ui.toast(t('err.offline'), 'error');
     const online = () => ui.toast(t('err.online'), 'success');
     const onClick = e => {
-      const a = e.target.closest && e.target.closest('a[href^="#"]:not([href^="#/"])');
+      const a = e.target.closest && e.target.closest('a[href^="#"]:not([href^="/"])');
       if (!a || e.defaultPrevented || a.getAttribute('href') === '#') return;
       e.preventDefault();
       const target = document.getElementById(a.getAttribute('href').slice(1));
@@ -138,17 +163,18 @@ function Shell() {
     window.addEventListener('scroll', onScroll, { passive: true });
     document.addEventListener('keydown', onKey);
     document.addEventListener('click', onClick);
+    document.addEventListener('click', handleLinkClick);
     window.addEventListener('offline', offline);
     window.addEventListener('online', online);
-    return () => { window.removeEventListener('scroll', onScroll); document.removeEventListener('keydown', onKey); document.removeEventListener('click', onClick); window.removeEventListener('offline', offline); window.removeEventListener('online', online); };
+    return () => { window.removeEventListener('scroll', onScroll); document.removeEventListener('keydown', onKey); document.removeEventListener('click', onClick); document.removeEventListener('click', handleLinkClick); window.removeEventListener('offline', offline); window.removeEventListener('online', online); };
   }, [ui]);
 
-  const hash = location.hash || '#/';
+  const hash = route.path;
   return (<>
     <a id="skip" className="skip-link" href="#main">{t('a11y.skip')}</a>
     {mode === 'full' && <Header hash={hash} />}
     <main id="main" tabIndex={-1} ref={mainRef}>
-      <div className="page page-in" key={route.path}><Suspense fallback={<div className="page-loading"><Spinner big /></div>}>{page}</Suspense></div>
+      <div className="page page-in" key={route.path}><PageBoundary><Suspense fallback={<div className="page-loading"><Spinner big /></div>}>{page}</Suspense></PageBoundary></div>
     </main>
     {mode === 'full' && <Footer />}
     {mode === 'full' && <button className="to-top" onClick={() => { window.scrollTo({ top: 0, behavior: reducedMotion() ? 'auto' : 'smooth' }); (document.querySelector('#main h1') || document.getElementById('main')).focus({ preventScroll: true }); }} aria-label={t('a11y.toTop')}><Icon name="arrowUp" /></button>}

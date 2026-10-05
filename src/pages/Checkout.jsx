@@ -7,13 +7,15 @@ import { SummaryRows, CouponBox } from './Cart.jsx';
 import { formatAddress } from './Order.jsx';
 import { S } from '../lib/store.js';
 import { t, pname } from '../lib/i18n.js';
-import { money, errorText } from '../lib/format.js';
+import { money, errorText, countryName } from '../lib/format.js';
+import { shipEta } from '../components/ShippingInfo.jsx';
 import { V, card } from '../lib/validate.js';
 import { useForm } from '../lib/useForm.js';
-import { navigate, useTitle } from '../lib/router.js';
+import { navigate, redirectTo, useTitle } from '../lib/router.js';
 
 const STEPS = ['info', 'shipping', 'payment', 'done'];
-const COUNTRIES = ['AE', 'SA', 'OM', 'QA', 'BH', 'KW', 'GB', 'US', 'ES', 'OTHER'];
+/* Address book countries; checkout narrows this to the countries we actually ship to (shipping rules) */
+export const ADDRESS_COUNTRIES = ['AE', 'SA', 'OM', 'QA', 'BH', 'KW', 'GB', 'US', 'ES'];
 const CK = 'oz_checkout_v1';
 const ck = {
   get() { try { return JSON.parse(sessionStorage.getItem(CK)) || {}; } catch (e) { return {}; } },
@@ -23,12 +25,13 @@ const ck = {
 
 export const addrRules = (prefix = '') => ({ [prefix + 'firstName']: [V.required], [prefix + 'lastName']: [V.required], [prefix + 'country']: [V.required], [prefix + 'line1']: [V.required, V.min(4)], [prefix + 'city']: [V.required], [prefix + 'phone']: [V.required, V.phone] });
 
-export function AddressFields({ a = {}, prefix = '', f }) {
+export function AddressFields({ a = {}, prefix = '', f, countries = ADDRESS_COUNTRIES, onCountry }) {
   const err = n => f.errors[prefix + n];
   const F = (n, props) => <Field name={prefix + n} error={err(n)} onClear={f.clear} defaultValue={a[n] || ''} {...props} />;
   return (<>
     <div className="grid-2">{F('firstName', { label: t('form.firstName'), required: true, autoComplete: 'given-name' })}{F('lastName', { label: t('form.lastName'), required: true, autoComplete: 'family-name' })}</div>
-    <Field name={prefix + 'country'} label={t('form.country')} required defaultValue={a.country || 'AE'} options={COUNTRIES.map(c => ({ value: c, label: t('country.' + c) }))} autoComplete="country" error={err('country')} onClear={f.clear} />
+    <Field name={prefix + 'country'} label={t('form.country')} required defaultValue={countries.includes(a.country) ? a.country : countries[0]} options={countries.map(c => ({ value: c, label: countryName(c) }))} autoComplete="country" error={err('country')} onClear={f.clear}
+      onChange={onCountry ? e => onCountry(e.target.value) : undefined} />
     {F('line1', { label: t('form.line1'), required: true, autoComplete: 'address-line1' })}
     {F('line2', { label: t('form.line2'), autoComplete: 'address-line2' })}
     <div className="grid-2">{F('city', { label: t('form.city'), required: true, autoComplete: 'address-level2' })}{F('state', { label: t('form.state'), autoComplete: 'address-level1' })}</div>
@@ -45,7 +48,7 @@ function Stepper({ active }) {
       {STEPS.map((s, i) => {
         const state = i < idx ? 'done' : i === idx ? 'current' : 'todo';
         const inner = <><span className="st-n">{state === 'done' ? <Icon name="check" /> : i + 1}</span><span className="st-l">{t('ck.step.' + s)}</span></>;
-        return <li key={s} className={`st ${state}`} aria-current={state === 'current' ? 'step' : undefined}>{state === 'done' && s !== 'done' ? <a href={`#/checkout/${s}`}>{inner}</a> : inner}</li>;
+        return <li key={s} className={`st ${state}`} aria-current={state === 'current' ? 'step' : undefined}>{state === 'done' && s !== 'done' ? <a href={`/checkout/${s}`}>{inner}</a> : inner}</li>;
       })}
     </ol>
   );
@@ -70,42 +73,25 @@ function Aside({ tt, shippingMethod }) {
   );
 }
 
+/* Contact step: purchases need a signed-in account (GAP-001), so this confirms who is buying */
 function InfoStep() {
   const ui = useUI();
-  const f = useForm();
   const st = ck.get();
   const u = S.user();
-  const [create, setCreate] = useState(!!(st.contact || {}).createAccount);
-  const [busy, setBusy] = useState(false);
   const submit = e => {
     e.preventDefault();
-    const form = e.currentTarget;
-    if (S.user()) { ck.set({ contact: { email: S.user().email, newsletter: form.elements.newsletter.checked } }); navigate('#/checkout/shipping'); return; }
-    const d = f.validate(form, Object.assign({ email: [V.required, V.email] }, create ? { password: [V.required, V.password] } : {}));
-    if (!d) return;
-    ck.set({ contact: { email: d.email.trim(), newsletter: !!d.newsletter, createAccount: create } });
-    if (!create) { navigate('#/checkout/shipping'); return; }
-    setBusy(true);
-    S.register({ email: d.email, password: d.password, name: '' }).then(() => {
-      ui.toast(t('auth.createdCheckEmail', { email: d.email }), 'success');
-      navigate('#/checkout/shipping');
-    }).catch(err => { setBusy(false); f.setAlert({ type: 'error', msg: err.code === 'exists' ? t('err.existsCheckout') : errorText(err) }); });
+    ck.set({ contact: { email: u.email, newsletter: e.currentTarget.elements.newsletter.checked } });
+    navigate('/checkout/shipping');
   };
   return (
     <form className="ck-form" data-ck="info" noValidate onSubmit={submit}>
       <h2 className="ck-h">{t('ck.step.info')}</h2>
-      {f.alert && <Alert>{f.alert.msg}</Alert>}
-      {u ? (
-        <div className="signed-in card"><Icon name="user" /><div><p>{t('ck.signedInAs')}</p><strong>{u.email}</strong></div><button type="button" className="link-btn" onClick={() => S.logout()}>{t('nav.logout')}</button></div>
-      ) : (<>
-        <p className="muted">{t('ck.haveAccount')} <a href={`#/login?next=${encodeURIComponent('/checkout')}`}>{t('nav.login')}</a></p>
-        <Field name="email" label={t('form.email')} type="email" required defaultValue={(st.contact || {}).email || ''} autoComplete="email" hint={t('ck.emailHint')} error={f.errors.email} onClear={f.clear} />
-        <Check name="createAccount" checked={create} onChange={e => setCreate(e.target.checked)} label={t('ck.createAccount')} />
-        {create && <Field name="password" label={t('form.password')} type="password" required autoComplete="new-password" hint={t('val.passwordHint')} error={f.errors.password} onClear={f.clear} />}
-      </>)}
+      <div className="signed-in card"><Icon name="user" /><div><p>{t('ck.signedInAs')}</p><strong>{u.email}</strong></div>
+        <button type="button" className="link-btn" onClick={() => S.logout().then(() => ui.toast(t('auth.loggedOut'), 'info'))}>{t('nav.logout')}</button></div>
+      <p className="muted small">{t('ck.orderEmails')}</p>
       <Check name="newsletter" defaultChecked={!!(st.contact || {}).newsletter} label={t('ck.newsletter')} />
-      <div className="ck-nav"><a className="link-arrow back" href="#/cart"><Icon name="arrowRight" className="flip rot" /> {t('ck.backCart')}</a>
-        <Button type="submit" className="btn btn-primary btn-lg" busy={busy} busyLabel={t('auth.creating')}>{t('ck.toShipping')} <Icon name="arrowRight" className="flip" /></Button></div>
+      <div className="ck-nav"><a className="link-arrow back" href="/cart"><Icon name="arrowRight" className="flip rot" /> {t('ck.backCart')}</a>
+        <Button type="submit" className="btn btn-primary btn-lg">{t('ck.toShipping')} <Icon name="arrowRight" className="flip" /></Button></div>
     </form>
   );
 }
@@ -115,27 +101,35 @@ function ShippingStep({ onMethod }) {
   const f = useForm();
   const st = ck.get();
   const u = S.user();
-  const saved = u ? u.addresses : [];
-  const [sel, setSel] = useState(st.addressId || (saved.find(a => a.isDefault) || {}).id || (saved[0] || {}).id || 'new');
+  const shipTo = S.shipCountries();
+  const saved = u.addresses;
+  const usable = a => shipTo.includes(a.country);
+  const firstUsable = saved.find(a => a.isDefault && usable(a)) || saved.find(usable);
+  const [sel, setSel] = useState(st.addressId && (st.addressId === 'new' || saved.some(a => a.id === st.addressId && usable(a))) ? st.addressId : (firstUsable || {}).id || 'new');
+  const prefill = st.shipping && st.addressId === 'new' ? st.shipping : { firstName: (u.name || '').split(' ')[0], lastName: (u.name || '').split(' ').slice(1).join(' '), phone: u.phone, country: shipTo[0] };
+  const [newCountry, setNewCountry] = useState(shipTo.includes(prefill.country) ? prefill.country : shipTo[0]);
+  const country = sel === 'new' ? newCountry : (saved.find(a => a.id === sel) || {}).country;
+  const weight = S.totals({ country }).weight;
+  const methods = ['standard', 'express'].filter(m => S.shipRule(country, m, weight));
   const [method, setMethod] = useState(st.shippingMethod || 'standard');
+  const chosen = methods.includes(method) ? method : methods[0];
   const [busy, setBusy] = useState(false);
-  const set = S.settings();
-  const stdFree = S.totals({ shippingMethod: 'standard' }).shipping === 0;
-  const prefill = st.shipping && st.addressId === 'new' ? st.shipping : (u ? { firstName: (u.name || '').split(' ')[0], lastName: (u.name || '').split(' ').slice(1).join(' '), phone: u.phone } : {});
-  const pick = m => { setMethod(m); ck.set({ shippingMethod: m }); onMethod(m); };
+  useEffect(() => { if (chosen && chosen !== st.shippingMethod) { ck.set({ shippingMethod: chosen }); onMethod(chosen, country); } else onMethod(chosen, country); }, [chosen, country]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pick = m => { setMethod(m); ck.set({ shippingMethod: m }); onMethod(m, country); };
 
   const submit = e => {
     e.preventDefault();
-    if (sel !== 'new') { ck.set({ addressId: sel, shipping: saved.find(x => x.id === sel), shippingMethod: method }); navigate('#/checkout/payment'); return; }
+    if (!chosen) return;
+    if (sel !== 'new') { ck.set({ addressId: sel, shipping: saved.find(x => x.id === sel), shippingMethod: chosen }); navigate('/checkout/payment'); return; }
     const d = f.validate(e.currentTarget, addrRules());
     if (!d) return;
     const addr = pickAddress(d);
-    ck.set({ addressId: 'new', shipping: addr, shippingMethod: method });
-    if (u && d.saveAddress) {
+    ck.set({ addressId: 'new', shipping: addr, shippingMethod: chosen });
+    if (d.saveAddress) {
       setBusy(true);
-      S.saveAddress({ label: t('addr.address'), ...addr }).then(s => { ck.set({ addressId: s.id }); ui.toast(t('addr.saved'), 'success'); navigate('#/checkout/payment'); })
-        .catch(() => navigate('#/checkout/payment'));
-    } else navigate('#/checkout/payment');
+      S.saveAddress({ label: t('addr.address'), ...addr }).then(s => { ck.set({ addressId: s.id }); ui.toast(t('addr.saved'), 'success'); navigate('/checkout/payment'); })
+        .catch(() => navigate('/checkout/payment'));
+    } else navigate('/checkout/payment');
   };
 
   return (
@@ -144,29 +138,33 @@ function ShippingStep({ onMethod }) {
       {S.cart().some(l => l.gift) && <Alert type="info" icon="gift">{t('ck.giftAddress')}</Alert>}
       {saved.length > 0 && (
         <fieldset className="fs"><legend>{t('ck.savedAddresses')}</legend><div className="addr-pick">
-          {saved.map(a => <label key={a.id} className="opt-card"><input type="radio" name="addressId" value={a.id} checked={sel === a.id} onChange={() => setSel(a.id)} />
-            <span className="oc-body"><strong>{a.label || t('addr.address')}{a.isDefault && <> <span className="badge badge-muted">{t('addr.default')}</span></>}</strong><small>{formatAddress(a)}</small></span></label>)}
+          {saved.map(a => <label key={a.id} className={`opt-card${usable(a) ? '' : ' disabled'}`}><input type="radio" name="addressId" value={a.id} checked={sel === a.id} disabled={!usable(a)} onChange={() => setSel(a.id)} />
+            <span className="oc-body"><strong>{a.label || t('addr.address')}{a.isDefault && <> <span className="badge badge-muted">{t('addr.default')}</span></>}</strong><small>{formatAddress(a)}</small>
+              {!usable(a) && <small className="err-text">{t('ck.noShipCountry', { country: countryName(a.country) })}</small>}</span></label>)}
           <label className="opt-card"><input type="radio" name="addressId" value="new" checked={sel === 'new'} onChange={() => setSel('new')} /><span className="oc-body"><strong><Icon name="plus" /> {t('ck.newAddress')}</strong></span></label>
         </div></fieldset>
       )}
       {sel === 'new' && <div>
-        <AddressFields a={prefill} f={f} />
-        {u && <Check name="saveAddress" defaultChecked label={t('ck.saveAddress')} />}
+        <AddressFields a={{ ...prefill, country: newCountry }} f={f} countries={shipTo} onCountry={setNewCountry} />
+        <Check name="saveAddress" defaultChecked label={t('ck.saveAddress')} />
       </div>}
-      <fieldset className="fs"><legend>{t('ck.method')}</legend><div className="ship-opts">
-        <label className="opt-card"><input type="radio" name="shippingMethod" value="standard" checked={method === 'standard'} onChange={() => pick('standard')} />
-          <span className="oc-body"><Icon name="truck" /><strong>{t('ship.standard')}</strong><small>{t('ship.standardEta')}</small><em>{stdFree ? t('common.free') : money(set.shippingFee)}</em></span></label>
-        <label className="opt-card"><input type="radio" name="shippingMethod" value="express" checked={method === 'express'} onChange={() => pick('express')} />
-          <span className="oc-body"><Icon name="clock" /><strong>{t('ship.express')}</strong><small>{t('ship.expressEta')}</small><em>{money(set.expressFee)}</em></span></label>
-      </div></fieldset>
-      <div className="ck-nav"><a className="link-arrow back" href="#/checkout/info"><Icon name="arrowRight" className="flip rot" /> {t('ck.back')}</a>
-        <Button type="submit" className="btn btn-primary btn-lg" busy={busy} busyLabel={t('common.saving')}>{t('ck.toPayment')} <Icon name="arrowRight" className="flip" /></Button></div>
+      <fieldset className="fs"><legend>{t('ck.method')}</legend>
+        {methods.length ? <div className="ship-opts">{methods.map(m => {
+          const rule = S.shipRule(country, m, weight), fee = S.shippingFor(country, m);
+          return <label key={m} className="opt-card"><input type="radio" name="shippingMethod" value={m} checked={chosen === m} onChange={() => pick(m)} />
+            <span className="oc-body"><Icon name={m === 'express' ? 'clock' : 'truck'} /><strong>{t('ship.' + m)}</strong><small>{shipEta(rule, m)}</small><em>{fee ? money(fee) : t('common.free')}</em></span></label>;
+        })}</div> : <Alert>{t('err.shippingUnavailable')}</Alert>}
+      </fieldset>
+      <div className="ck-nav"><a className="link-arrow back" href="/checkout/info"><Icon name="arrowRight" className="flip rot" /> {t('ck.back')}</a>
+        <Button type="submit" className="btn btn-primary btn-lg" busy={busy} busyLabel={t('common.saving')} disabled={!chosen}>{t('ck.toPayment')} <Icon name="arrowRight" className="flip" /></Button></div>
     </form>
   );
 }
 
-/* Which payment integration is live. 'test' = the sandbox Edge Function (the server must also have
-   TEST_PAYMENTS_ENABLED=true). Until the real gateway is connected, anything else disables paying. */
+/* Which payment integration is live:
+     'stripe' = Stripe Checkout (hosted page; order marked paid by the verified webhook)
+     'test'   = sandbox Edge Function (server must also have TEST_PAYMENTS_ENABLED=true)
+     anything else disables paying. */
 const PROVIDER = import.meta.env.VITE_PAYMENT_PROVIDER || 'none';
 
 /* Fingerprint of what the pending order was created from; if anything changes we start a new order */
@@ -180,24 +178,46 @@ function PaymentStep() {
   const [brand, setBrand] = useState('');
   const [flow, setFlow] = useState(null); // {stage:'processing'|'result', kind, reason, outcome}
   const cardRef = useRef(null);
-  const tt = S.totals({ shippingMethod: st.shippingMethod });
-  const email = u ? u.email : st.contact.email;
-  const enabled = PROVIDER === 'test';
+  const tt = S.totals({ shippingMethod: st.shippingMethod, country: st.shipping.country });
+  const email = u.email;
+  const enabled = PROVIDER === 'test' || PROVIDER === 'stripe';
+  const isStripe = PROVIDER === 'stripe';
+  /* back from Stripe without paying: the held order stays reserved, so trying again re-uses it */
+  const [returned] = useState(() => new URLSearchParams(location.search).get('payment') === 'cancelled');
 
+  /* The order is created (prices, stock, totals decided by the server) once, then re-used for retries.
+     If the cart, address or coupon changed since, the old order is released and a new one is created. */
+  const ensureOrder = async () => {
+    let pend = ck.get().pending;
+    const sig = orderSig(ck.get(), email);
+    if (pend && pend.sig !== sig) { await S.cancelPayment(pend).catch(() => {}); pend = null; ck.set({ pending: null }); }
+    if (!pend) {
+      const o = await S.createOrder({ shipping: st.shipping, shippingMethod: st.shippingMethod || 'standard' });
+      pend = { id: o.id, token: o.token, sig };
+      ck.set({ pending: pend });
+      if (st.contact && st.contact.newsletter) S.subscribe(email).catch(() => {});
+    }
+    return pend;
+  };
+  const toStripe = async () => {
+    setFlow({ stage: 'redirect' });
+    let pend = null;
+    try {
+      pend = await ensureOrder();
+      const url = await S.stripeCheckout(pend);
+      window.location.assign(url);                       // Stripe's hosted payment page
+    } catch (err) {
+      if (pend && ['orderNotFound', 'invalidState'].includes(err.code)) ck.set({ pending: null });
+      setFlow({ stage: 'result', kind: 'orderFailed', reason: errorText(err) });
+    }
+  };
   const charge = async outcome => {
     setFlow({ stage: 'processing', outcome });
     let pend = ck.get().pending;
     try {
-      const sig = orderSig(ck.get(), email);
-      if (pend && pend.sig !== sig) { S.cancelPayment(pend).catch(() => {}); pend = null; ck.set({ pending: null }); }
-      if (!pend) {
-        const o = await S.createOrder({ email, shipping: st.shipping, shippingMethod: st.shippingMethod || 'standard' });
-        pend = { id: o.id, token: o.token, sig };
-        ck.set({ pending: pend });
-        if (st.contact && st.contact.newsletter) S.subscribe(email).catch(() => {});
-      }
+      pend = await ensureOrder();
       const r = await S.payTest(pend, outcome);
-      if (r.status === 'paid') { ck.clear(); await S.completeOrder(pend.id); setFlow(null); navigate(`#/order/${pend.id}?new=1`); return; }
+      if (r.status === 'paid') { ck.clear(); await S.completeOrder(pend.id); setFlow(null); navigate(`/order/${pend.id}?new=1`); return; }
       setFlow({ stage: 'result', kind: 'failed', outcome, reason: t(r.status === 'insufficient' ? 'pay.errFunds' : 'pay.errDeclined') });
     } catch (err) {
       /* the held order expired or was cancelled — the next attempt creates a fresh one */
@@ -208,6 +228,7 @@ function PaymentStep() {
   const pay = () => {
     if (!navigator.onLine) { f.setAlert({ type: 'error', msg: t('err.network') }); return; }
     if (!enabled) { f.setAlert({ type: 'error', msg: t('err.paymentsUnavailable') }); return; }
+    if (isStripe) { toStripe(); return; }
     const form = cardRef.current;
     const rules = {
       ccname: [V.required, V.min(2)],
@@ -234,20 +255,27 @@ function PaymentStep() {
     <div className="ck-form" data-ck="payment">
       <h2 className="ck-h">{t('ck.review')}</h2>
       <div className="review-box card">
-        <div className="rb-row"><span className="rb-l">{t('ck.contact')}</span><span>{email}</span><a href="#/checkout/info" className="link-btn">{t('common.change')}</a></div>
-        <div className="rb-row"><span className="rb-l">{t('ck.shipTo')}</span><span>{formatAddress(st.shipping)}</span><a href="#/checkout/shipping" className="link-btn">{t('common.change')}</a></div>
-        <div className="rb-row"><span className="rb-l">{t('ck.method')}</span><span>{t('ship.' + (st.shippingMethod || 'standard'))} · {tt.shipping ? money(tt.shipping) : t('common.free')}</span><a href="#/checkout/shipping" className="link-btn">{t('common.change')}</a></div>
+        <div className="rb-row"><span className="rb-l">{t('ck.contact')}</span><span>{email}</span><a href="/checkout/info" className="link-btn">{t('common.change')}</a></div>
+        <div className="rb-row"><span className="rb-l">{t('ck.shipTo')}</span><span>{formatAddress(st.shipping)}</span><a href="/checkout/shipping" className="link-btn">{t('common.change')}</a></div>
+        <div className="rb-row"><span className="rb-l">{t('ck.method')}</span><span>{t('ship.' + (st.shippingMethod || 'standard'))} · {tt.shipping ? money(tt.shipping) : t('common.free')}</span><a href="/checkout/shipping" className="link-btn">{t('common.change')}</a></div>
       </div>
 
       <h2 className="ck-h">{t('ck.step.payment')}</h2>
       {f.alert && <Alert>{f.alert.msg}</Alert>}
-      {!enabled && <Alert type="info">{t('pay.unavailable')} <a href="#/contact">{t('nav.contact')}</a></Alert>}
+      {!enabled && <Alert type="info">{t('pay.unavailable')} <a href="/contact">{t('nav.contact')}</a></Alert>}
+      {returned && <Alert type="info">{t('pay.stripeReturned')}</Alert>}
       <p className="muted small"><Icon name="lock" /> {t('pay.secureNote')}</p>
       <div className="pay-methods" role="radiogroup" aria-label={t('pay.method')}>
         <div className="pay-m on">
           <label className="pay-head"><input type="radio" name="pm" value="card" checked readOnly /><span><Icon name="card" /> {t('pay.card')}</span>
             <span className="pm-marks"><span className="pm pm-visa">VISA</span><span className="pm pm-mc"><i /><i /></span><span className="pm pm-amex">AMEX</span></span></label>
-          <form className="pay-body" data-card-form noValidate autoComplete="on" ref={cardRef} hidden={!enabled} onSubmit={e => { e.preventDefault(); pay(); }}>
+          {isStripe && <div className="pay-body stripe-info" data-stripe-info>
+            <p>{t('pay.stripeText')}</p>
+            <p className="muted small">{t('pay.stripeMethods')}</p>
+            {import.meta.env.DEV && <details className="demo-note"><summary><Icon name="info" /> {t('pay.demoTitle')}</summary>
+              <ul><li><code dir="ltr">4242 4242 4242 4242</code> — {t('pay.demoOk')}</li><li><code dir="ltr">4000 0025 0000 3155</code> — 3-D Secure</li><li><code dir="ltr">4000 0000 0000 9995</code> — {t('pay.demoDecline')}</li></ul></details>}
+          </div>}
+          <form className="pay-body" data-card-form noValidate autoComplete="on" ref={cardRef} hidden={!enabled || isStripe} onSubmit={e => { e.preventDefault(); pay(); }}>
             <Field name="ccname" label={t('pay.nameOnCard')} required autoComplete="cc-name" error={f.errors.ccname} onClear={f.clear} />
             <div className={`field card-num${f.errors.ccnum ? ' invalid' : ''}`}>
               <label htmlFor="ccnum">{t('pay.cardNumber')}</label>
@@ -271,10 +299,15 @@ function PaymentStep() {
           </form>
         </div>
       </div>
-      <p className="muted small terms">{t('ck.terms')} <a href="#/policies/terms">{t('policy.terms')}</a> · <a href="#/policies/privacy">{t('policy.privacy')}</a></p>
-      <div className="ck-nav"><a className="link-arrow back" href="#/checkout/shipping"><Icon name="arrowRight" className="flip rot" /> {t('ck.back')}</a>
-        <button className="btn btn-teal btn-lg" data-action="pay" onClick={pay} disabled={!enabled}><Icon name="lock" /> {t('pay.payNow', { amount: money(tt.total) })}</button></div>
+      <p className="muted small terms">{t('ck.terms')} <a href="/policies/terms">{t('policy.terms')}</a> · <a href="/policies/privacy">{t('policy.privacy')}</a></p>
+      <div className="ck-nav"><a className="link-arrow back" href="/checkout/shipping"><Icon name="arrowRight" className="flip rot" /> {t('ck.back')}</a>
+        <button className="btn btn-teal btn-lg" data-action="pay" onClick={pay} disabled={!enabled}><Icon name="lock" /> {t(isStripe ? 'pay.payStripe' : 'pay.payNow', { amount: money(tt.total) })}</button></div>
 
+      {flow && flow.stage === 'redirect' && (
+        <Overlay title={t('pay.statusTitle')} size="sm" className="pay-ov" dismissible={false} onClose={() => {}}>
+          <div className="pay-state"><Spinner big /><h3>{t('pay.toStripe')}</h3><p className="muted">{t('pay.dontClose')}</p></div>
+        </Overlay>
+      )}
       {flow && flow.stage === 'processing' && (
         <Overlay title={t('pay.statusTitle')} size="sm" className="pay-ov" dismissible={false} onClose={() => {}}>
           <div className="pay-state">
@@ -306,20 +339,22 @@ function PaymentStep() {
 
 export default function Checkout({ step: rawStep }) {
   const step = STEPS.includes(rawStep) && rawStep !== 'done' ? rawStep : 'info';
-  const [method, setMethod] = useState(ck.get().shippingMethod);
+  const [ship, setShip] = useState(() => ({ method: ck.get().shippingMethod, country: (ck.get().shipping || {}).country }));
   useTitle(`${t('ck.title')} — ${t('ck.step.' + step)}`);
   const st = ck.get();
   const u = S.user();
+  /* account required before any checkout step (GAP-001 / AC-PURCHASE-001); the server enforces it too */
   const redirect = !S.cart().length ? null
-    : step !== 'info' && !(u || (st.contact && st.contact.email)) ? '#/checkout/info'
-      : step === 'payment' && !st.shipping ? '#/checkout/shipping' : null;
-  useEffect(() => { if (redirect) location.replace(location.href.split('#')[0] + redirect); }, [redirect]);
+    : !u ? '/login?next=' + encodeURIComponent('/checkout') + '&reason=checkout'
+      : step !== 'info' && !st.contact ? '/checkout/info'
+        : step === 'payment' && !st.shipping ? '/checkout/shipping' : null;
+  useEffect(() => { if (redirect) redirectTo(redirect); }, [redirect]);
 
   if (!S.cart().length) return (
-    <section className="container section"><Empty ic="bag" title={t('ck.emptyTitle')} text={t('ck.emptyText')}><a className="btn btn-primary" href="#/shop/diffusers">{t('cart.startShopping')}</a></Empty></section>
+    <section className="container section"><Empty ic="bag" title={t('ck.emptyTitle')} text={t('ck.emptyText')}><a className="btn btn-primary" href="/shop/diffusers">{t('cart.startShopping')}</a></Empty></section>
   );
   if (redirect) return null;
-  const tt = S.totals({ shippingMethod: step === 'info' ? undefined : method });
+  const tt = S.totals({ shippingMethod: step === 'info' ? undefined : ship.method, country: (step === 'payment' ? st.shipping.country : ship.country) || 'AE' });
 
   return (
     <section className="container ck-page">
@@ -328,10 +363,10 @@ export default function Checkout({ step: rawStep }) {
       <div className="ck-grid">
         <div className="ck-main">
           {step === 'info' && <InfoStep />}
-          {step === 'shipping' && <ShippingStep onMethod={setMethod} />}
+          {step === 'shipping' && <ShippingStep onMethod={(method, country) => setShip(s => s.method === method && s.country === country ? s : { method, country })} />}
           {step === 'payment' && <PaymentStep />}
         </div>
-        <div><Aside tt={tt} shippingMethod={step === 'info' ? null : method} /></div>
+        <div><Aside tt={tt} shippingMethod={step === 'info' ? null : ship.method} /></div>
       </div>
     </section>
   );

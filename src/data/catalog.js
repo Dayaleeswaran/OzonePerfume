@@ -5,7 +5,10 @@
 
 export const BRAND = {
   name: 'Ozone Scents',
-  legalName: 'Aroma Ozone Scents LLC',
+  /* Confirmed company data (requirements §1.2). OD-006: final public wording to be approved by the client. */
+  legalName: 'Aroma Zone Scents LLC',
+  licenseNo: '2647467',
+  trn: '105514990800003',
   tagline: 'The Architecture of Olfactory Luxury',
   phone: '+971 52 626 6873',
   phoneRaw: '971526266873',
@@ -14,8 +17,10 @@ export const BRAND = {
   email: 'info@ozonescents.com',
   salesEmail: 'Sales@aromaozonescents.com',
   website: 'www.ozonescents.com',
-  address: 'Media City, Sharjah, United Arab Emirates',
-  mapQuery: 'Sharjah Media City, Sharjah, United Arab Emirates'
+  address: 'Sharjah Media City, Sharjah, United Arab Emirates',
+  mapQuery: 'Sharjah Media City, Sharjah, United Arab Emirates',
+  /* Official social profiles — OPEN: add the client's real URLs; icons are only shown for entries filled in here */
+  socials: { instagram: '', facebook: '', tiktok: '' }
 };
 
 export const CURRENCIES = {
@@ -233,27 +238,12 @@ SEED_PRODUCTS.push(
   oil('versace-hotel', 'Versace Hotel', 'Versace Hotel', 'فيرساتشي هوتيل', 'woody', Object.assign({ gallery: ['oil-versace-hotel-2'] }, HOTEL))
 );
 
+/* Confirmed launch codes (BR-PROMO-001/003). Eligibility is enforced by the database. */
 export const SEED_COUPONS = [
-  { code: 'WELCOME10', type: 'percent', value: 10, min: 0, active: true, note: '10% off your first order' },
-  { code: 'FREESHIP', type: 'ship', value: 0, min: 0, active: true, note: 'Free standard shipping' }
+  { code: 'WELCOME10', type: 'percent', value: 10, min: 0, minExclusive: false, firstOrderOnly: true, active: true, note: '10% off a first purchase' },
+  { code: 'LAUNCH20', type: 'percent', value: 20, min: 600, minExclusive: true, firstOrderOnly: false, active: true, note: '20% off orders above AED 600' }
 ];
 
 /* No seed reviews: ratings only come from real customers (submitted reviews are moderated). */
 export const SEED_REVIEWS = [];
 
-export const SEED_SETTINGS = {
-  freeShippingThreshold: 99,
-  shippingFee: 15,
-  expressFee: 35,
-  vatRate: 5,
-  giftWrap: { standard: 0, premium: 25, luxury: 45 },
-  cryptoEnabled: true,
-  announcement: true
-};
-
-/* Demo crypto rates (AED per coin) used only to show an indicative amount */
-export const CRYPTO = {
-  USDT: { network: 'TRC-20', aedPerCoin: 3.6725, address: 'TQ7n3oZoneDemoAddr9x4K2mPqL8vWrE5bH1' },
-  BTC:  { network: 'Bitcoin', aedPerCoin: 236000, address: 'bc1qozonedemo7x3k9m2p8v4w5r6t0y1u2i3o4' },
-  ETH:  { network: 'ERC-20', aedPerCoin: 9800, address: '0x0Z0NEdE7a1b2C3d4E5f6A7b8C9d0E1f2A3b4C5' }
-};

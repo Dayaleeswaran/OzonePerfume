@@ -1,0 +1,16 @@
+# Ozone Scents — production robots rules (SEO-006, SEO-012)
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /account
+Disallow: /cart
+Disallow: /checkout
+Disallow: /login
+Disallow: /register
+Disallow: /verify
+Disallow: /reset
+Disallow: /order
+Disallow: /wishlist
+Disallow: /search
+
+Sitemap: https://www.ozonescents.com/sitemap.xml

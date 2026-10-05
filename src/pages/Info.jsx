@@ -8,13 +8,16 @@ import { money, errorText } from '../lib/format.js';
 import { V } from '../lib/validate.js';
 import { useForm } from '../lib/useForm.js';
 import { useTitle } from '../lib/router.js';
+import { useSeo } from '../lib/seo.js';
+import ShippingInfo from '../components/ShippingInfo.jsx';
 import { BRAND } from '../data/catalog.js';
 import NotFound from './NotFound.jsx';
 
 export function About() {
   useTitle(t('nav.about'));
+  useSeo({ path: '/about', title: t('nav.about'), description: t('meta.descAbout') }, [S.session.lang]);
   return (<>
-    <Breadcrumbs items={[['#/', t('nav.home')], [null, t('nav.about')]]} />
+    <Breadcrumbs items={[['/', t('nav.home')], [null, t('nav.about')]]} />
     {/* Split hero: copy on one side, the full product photo on the other, so the image is never cropped */}
     <section className="about-hero">
       <div className="container about-hero-in">
@@ -22,7 +25,7 @@ export function About() {
           <p className="eyebrow">{t('about.eyebrow')}</p>
           <h1 className="page-title left">{t('about.title')}</h1>
           <p className="lead">{t('about.lead')}</p>
-          <div className="btn-row"><a className="btn btn-teal" href="#/shop/diffusers">{t('hero.browse')}</a><a className="btn btn-ghost-dark" href="#/contact">{t('about.talk')}</a></div>
+          <div className="btn-row"><a className="btn btn-teal" href="/shop/diffusers">{t('hero.browse')}</a><a className="btn btn-ghost-dark" href="/contact">{t('about.talk')}</a></div>
         </div>
         <div className="about-hero-media"><FitImage k="o10" eager sizes="(max-width: 900px) 100vw, 50vw" /></div>
       </div>
@@ -41,13 +44,15 @@ export function About() {
       <div className="about-img reveal"><FitImage k="o4" sizes="(max-width: 900px) 100vw, 50vw" /></div>
       <div className="reveal" style={{ '--d': '100ms' }}><h2 className="sec-title left">{t('about.whatTitle')}</h2>
         <ul className="ticks lg">{['about.what1', 'about.what2', 'about.what3', 'about.what4'].map(k => <li key={k}><Icon name="check" />{t(k)}</li>)}</ul>
-        <div className="btn-row"><a className="btn btn-primary" href="#/shop/diffusers">{t('hero.browse')}</a><a className="btn btn-outline" href="#/contact">{t('about.talk')}</a></div>
+        <div className="btn-row"><a className="btn btn-primary" href="/shop/diffusers">{t('hero.browse')}</a><a className="btn btn-outline" href="/contact">{t('about.talk')}</a></div>
       </div>
     </section>
     <section className="section company-sec"><div className="container">
       <SectionHead title={t('about.companyTitle')} />
       <dl className="company card reveal">
         <div><dt>{t('about.c.name')}</dt><dd>{BRAND.legalName}</dd></div>
+        <div><dt>{t('about.c.license')}</dt><dd dir="ltr">{BRAND.licenseNo}</dd></div>
+        <div><dt>{t('about.c.trn')}</dt><dd dir="ltr">{BRAND.trn}</dd></div>
         <div><dt>{t('about.c.business')}</dt><dd>{t('about.c.businessV')}</dd></div>
         <div><dt>{t('about.c.location')}</dt><dd>{t('brand.address')}</dd></div>
         <div><dt>{t('about.c.area')}</dt><dd>{t('about.c.areaV')}</dd></div>
@@ -61,6 +66,7 @@ export function About() {
 
 export function Contact() {
   useTitle(t('nav.contact'));
+  useSeo({ path: '/contact', title: t('nav.contact'), description: t('contact.sub') }, [S.session.lang]);
   const f = useForm();
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(null);
@@ -76,7 +82,7 @@ export function Contact() {
       .catch(err => { setBusy(false); f.setAlert({ type: 'error', msg: t('contact.error') + ' ' + errorText(err) }); });
   };
   return (<>
-    <Breadcrumbs items={[['#/', t('nav.home')], [null, t('nav.contact')]]} />
+    <Breadcrumbs items={[['/', t('nav.home')], [null, t('nav.contact')]]} />
     <section className="page-hero"><div className="container"><h1 className="page-title">{t('contact.title')}</h1><p className="page-sub">{t('contact.sub')}</p></div></section>
     <section className="container contact-grid">
       <div className="contact-info">
@@ -85,12 +91,12 @@ export function Contact() {
         <a className="c-card card" href={`mailto:${BRAND.email}`}><Icon name="mail" /><span><strong>{t('contact.email')}</strong><span>{BRAND.email}</span></span></a>
         <a className="c-card card" href={`mailto:${BRAND.salesEmail}`}><Icon name="briefcase" /><span><strong>{t('contact.sales')}</strong><span>{BRAND.salesEmail}</span></span></a>
         <div className="c-card card"><Icon name="pin" /><span><strong>{t('contact.visit')}</strong><span>{t('brand.address')}</span></span></div>
-        <div className="socials big">{['instagram', 'facebook', 'tiktok'].map(s => <a key={s} href={`https://${s}.com`} target="_blank" rel="noopener noreferrer" aria-label={s}><Icon name={s} /></a>)}</div>
+        <div className="socials big">{Object.entries(BRAND.socials).filter(([, url]) => url).map(([s, url]) => <a key={s} href={url} target="_blank" rel="noopener noreferrer" aria-label={s}><Icon name={s} /></a>)}</div>
       </div>
       <div>
         {sent ? (
           <div className="card done-state" tabIndex={-1} ref={doneRef}><Icon name="check" className="done-ic" /><h2>{t('contact.successTitle')}</h2><p>{t('contact.successText', { email: sent })}</p>
-            <div className="btn-row center"><button className="btn btn-outline" onClick={() => setSent(null)}>{t('contact.again')}</button><a className="btn btn-primary" href="#/shop/diffusers">{t('cart.continue')}</a></div></div>
+            <div className="btn-row center"><button className="btn btn-outline" onClick={() => setSent(null)}>{t('contact.again')}</button><a className="btn btn-primary" href="/shop/diffusers">{t('cart.continue')}</a></div></div>
         ) : (
           <form className="card form-card contact-form" data-contact noValidate onSubmit={submit}>
             <h2 className="card-h">{t('contact.formTitle')}</h2>
@@ -110,8 +116,8 @@ export function Contact() {
         )}
       </div>
     </section>
-    <section className="container section-sm"><div className="map card">
-      <iframe title={t('contact.mapTitle')} loading="lazy" referrerPolicy="no-referrer" src="https://www.openstreetmap.org/export/embed.html?bbox=55.3500,25.2700,55.5300,25.3900&layer=mapnik" />
+    <section className="container section-sm"><div className="map card map-plain">
+      <p><Icon name="pin" /> {t('brand.address')}</p>
       <a className="map-link" href={`https://www.openstreetmap.org/search?query=${encodeURIComponent(BRAND.mapQuery)}`} target="_blank" rel="noopener noreferrer"><Icon name="pin" /> {t('contact.openMap')}</a>
     </div></section>
   </>);
@@ -122,14 +128,19 @@ export function Policy({ k }) {
   useTitle(keys.includes(k) ? t('policy.' + k) : t('nf.title'));
   if (!keys.includes(k)) return <NotFound />;
   const s = S.settings();
-  const vars = { fee: money(s.shippingFee), amount: money(s.freeShippingThreshold), express: money(s.expressFee), email: BRAND.email };
+  const vars = { amount: money(s.freeShippingThreshold), email: BRAND.email, vat: s.vatRate,
+    taxNote: t(s.taxMode === 'exclusive' ? 'pol.terms.vatExclusive' : 'pol.terms.vatInclusive', { rate: s.vatRate }) };
+  /* OD-008: returns/refunds and terms wording is not yet approved by the client */
+  const pending = k === 'returns' || k === 'terms';
   return (<>
-    <Breadcrumbs items={[['#/', t('nav.home')], [null, t('policy.' + k)]]} />
+    <Breadcrumbs items={[['/', t('nav.home')], [null, t('policy.' + k)]]} />
     <section className="container policy">
-      <nav className="policy-nav" aria-label={t('policy.nav')}><ul>{keys.map(x => <li key={x}><a href={`#/policies/${x}`} className={x === k ? 'on' : ''} aria-current={x === k ? 'page' : undefined}>{t('policy.' + x)}</a></li>)}</ul></nav>
+      <nav className="policy-nav" aria-label={t('policy.nav')}><ul>{keys.map(x => <li key={x}><a href={`/policies/${x}`} className={x === k ? 'on' : ''} aria-current={x === k ? 'page' : undefined}>{t('policy.' + x)}</a></li>)}</ul></nav>
       <article className="policy-body"><h1 className="page-title left">{t('policy.' + k)}</h1>
+        {pending && <Alert type="info">{t('policy.pending', { email: BRAND.email })}</Alert>}
+        {k === 'shipping' && <ShippingInfo />}
         {[1, 2, 3].map(i => <div key={i}><h2>{t(`pol.${k}.h${i}`, vars)}</h2><p>{t(`pol.${k}.p${i}`, vars)}</p></div>)}
-        <p className="muted small">{t('policy.questions')} <a href="#/contact">{t('nav.contact')}</a></p>
+        <p className="muted small">{t('policy.questions')} <a href="/contact">{t('nav.contact')}</a></p>
       </article>
     </section>
   </>);

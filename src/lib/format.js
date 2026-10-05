@@ -20,8 +20,16 @@ export function fmtDate(d, opts = { day: 'numeric', month: 'short', year: 'numer
 export function errorText(err) {
   const code = (err && err.code) || 'unknown';
   const key = 'err.' + code;
-  const txt = t(key, err || {});
+  const vars = Object.assign({}, err, err && err.min != null ? { min: money(err.min) } : {});
+  const txt = t(key, vars);
   return txt === key ? t('err.unknown') : txt;
+}
+
+/* Country name in the visitor's language (any ISO code, so new shipping countries need no code change) */
+export function countryName(code) {
+  const key = 'country.' + code, v = t(key);
+  if (v !== key) return v;
+  try { return new Intl.DisplayNames([LANGS[S.session.lang].locale], { type: 'region' }).of(code); } catch (e) { return code; }
 }
 
 export const debounce = (fn, ms = 250) => { let h; return (...a) => { clearTimeout(h); h = setTimeout(() => fn(...a), ms); }; };
@@ -29,6 +37,6 @@ export const debounce = (fn, ms = 250) => { let h; return (...a) => { clearTimeo
 /* Image paths for the optimised WebP set in public/assets/img (or a data:/http URL from admin uploads) */
 export function imgSrc(key, size = 'sm') {
   if (/^data:|^https?:|\//.test(key)) return { src: key, srcSet: undefined };
-  const small = `assets/img/${key}-sm.webp`, large = `assets/img/${key}.webp`;
+  const small = `/assets/img/${key}-sm.webp`, large = `/assets/img/${key}.webp`;
   return { src: size === 'lg' ? large : small, srcSet: `${small} 640w, ${large} 1200w` };
 }

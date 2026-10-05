@@ -5,8 +5,9 @@ import { Spinner } from '../components/ui.jsx';
 import { S } from '../lib/store.js';
 import { t, pname } from '../lib/i18n.js';
 import { money, fmtDate } from '../lib/format.js';
-import { useTitle } from '../lib/router.js';
+import { useTitle, redirectTo } from '../lib/router.js';
 import NotFound from './NotFound.jsx';
+import { VatRows } from './Cart.jsx';
 
 const ORDER_FLOW = ['placed', 'processing', 'shipped', 'delivered'];
 
@@ -47,7 +48,7 @@ export function OrderDetail({ o, inAccount }) {
           <h3 className="card-h">{t('order.items')}</h3>
           <ul className="od-items">{o.items.map((i, k) => { const p = S.product(i.productId); return (
             <li key={k}><Img k={i.img} /><div>
-              <a href={`#/product/${i.productId}`}>{p ? pname(p) : i.name}</a>
+              <a href={`/product/${i.productId}`}>{p ? pname(p) : i.name}</a>
               <small className="muted">{t('size.ml', { n: i.ml })} · {t('order.qty', { n: i.qty })}</small>
               {i.gift && <small className="gift-l"><Icon name="gift" /> {t('gift.for', { name: i.gift.recipientName })} · {t('gift.wrap.' + i.gift.wrap)}{i.gift.message && <> — “{i.gift.message}”</>}</small>}
             </div><strong>{money(i.price * i.qty)}</strong></li>
@@ -58,8 +59,7 @@ export function OrderDetail({ o, inAccount }) {
             {o.totals.discount > 0 && <div className="disc"><dt>{t('cart.coupon')} {o.coupon && <span className="code">{o.coupon}</span>}</dt><dd>− {money(o.totals.discount)}</dd></div>}
             {o.totals.giftFee > 0 && <div><dt>{t('cart.giftFee')}</dt><dd>{money(o.totals.giftFee)}</dd></div>}
             <div><dt>{t('cart.shipping')} ({t('ship.' + o.shippingMethod)})</dt><dd>{o.totals.shipping ? money(o.totals.shipping) : t('common.free')}</dd></div>
-            <div className="total"><dt>{t('cart.total')}</dt><dd>{money(o.totals.total)}</dd></div>
-            <div className="vat"><dt>{t('cart.vatLine', { rate: S.settings().vatRate })}</dt><dd>{money(o.totals.vat)}</dd></div>
+            <VatRows taxMode={o.taxMode} vat={o.totals.vat} total={o.totals.total} />
           </dl>
         </div>
         <div className="od-side">
@@ -83,19 +83,40 @@ export default function Order({ id, q }) {
   const o = S.order(id);
   const isNew = q.new === '1';
   const h1 = useRef(null);
+  const signedIn = !!S.user();
+  const fromStripe = q.paid === 'stripe';
+  const [waiting, setWaiting] = useState(fromStripe);
+  /* Stripe redirects before (or just after) its webhook arrives: refresh until the server confirms payment */
   useEffect(() => {
+    if (!fromStripe || !signedIn) return undefined;
+    S.finishCheckout();
+    let n = 0, live = true;
+    const tick = () => S.loadOrder(id).then(o => {
+      if (!live) return;
+      if ((o && o.payment.status !== 'pending') || ++n >= 20) { setWaiting(false); return; }
+      setTimeout(tick, 2000);
+    }).catch(() => live && setTimeout(tick, 3000));
+    tick();
+    return () => { live = false; };
+  }, [id, fromStripe, signedIn]);
+  useEffect(() => {
+    /* orders belong to an account (FR-ORD-010) */
+    if (!signedIn) { redirectTo('/login?next=' + encodeURIComponent('/order/' + id)); return undefined; }
     let live = true;
     /* Always refresh from the server: status may have changed since it was cached */
     S.loadOrder(id).then(r => live && setState(r ? 'ready' : 'missing')).catch(() => live && setState(S.order(id) ? 'ready' : 'missing'));
     return () => { live = false; };
-  }, [id]);
+  }, [id, signedIn]);
   useTitle(state === 'missing' ? t('order.notFound') : isNew ? t('order.confirmedEyebrow') : t('order.title', { id }));
   useEffect(() => { if (h1.current) h1.current.focus(); }, [state]);
+  if (!signedIn) return null;
   if (!o && state === 'loading') return <div className="page-loading"><Spinner big /></div>;
   if (!o) return <NotFound msg={t('order.notFound')} />;
   const u = S.user();
   return (
     <section className="container confirm">
+      {waiting && o && o.payment.status === 'pending' && <div className="alert alert-info pay-confirming"><Spinner /> <span>{t('pay.confirming')}</span></div>}
+      {!waiting && fromStripe && o && o.payment.status === 'pending' && <div className="alert alert-warn"><Icon name="info" /><span>{t('pay.confirmSlow')}</span></div>}
       {isNew ? (
         <div className="confirm-hero">
           <span className="confirm-check" aria-hidden="true"><svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="24" /><path d="m15 27 7 7 15-15" /></svg></span>
@@ -107,9 +128,9 @@ export default function Order({ id, q }) {
       ) : <h1 className="page-title left">{t('order.title', { id: o.id })}</h1>}
       <OrderDetail o={o} />
       <div className="btn-row center confirm-actions">
-        {u && <a className="btn btn-primary" href={`#/account/orders/${o.id}`}>{t('order.view')}</a>}
-        <a className="btn btn-outline" href="#/shop/diffusers">{t('cart.continue')}</a>
-        {u ? <a className="btn btn-ghost" href="#/account">{t('order.goAccount')}</a> : <a className="btn btn-ghost" href={`#/register?email=${encodeURIComponent(o.email)}`}>{t('order.createAccount')}</a>}
+        {u && <a className="btn btn-primary" href={`/account/orders/${o.id}`}>{t('order.view')}</a>}
+        <a className="btn btn-outline" href="/shop/diffusers">{t('cart.continue')}</a>
+        {u ? <a className="btn btn-ghost" href="/account">{t('order.goAccount')}</a> : <a className="btn btn-ghost" href={`/register?email=${encodeURIComponent(o.email)}`}>{t('order.createAccount')}</a>}
       </div>
     </section>
   );

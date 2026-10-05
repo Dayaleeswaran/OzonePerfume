@@ -8,7 +8,7 @@ import { S, api } from '../lib/store.js';
 import { t } from '../lib/i18n.js';
 import { money, errorText, reducedMotion } from '../lib/format.js';
 import { searchProducts } from '../lib/search.js';
-import { replaceHash, useTitle } from '../lib/router.js';
+import { replaceUrl, useTitle } from '../lib/router.js';
 import { TYPES, SPACES, FAMILIES, discountPct } from '../data/catalog.js';
 import NotFound from './NotFound.jsx';
 
@@ -124,8 +124,8 @@ export default function Listing({ kind, collKey, q }) {
   useEffect(() => { api(() => true, 380).then(() => setState('ready')).catch(err => setState({ err })); }, []);
   /* keep the URL in sync with the filters so results are shareable */
   useEffect(() => {
-    const h = location.hash.split('?')[0] + filtersToQuery(f);
-    if (h !== location.hash) replaceHash(h);
+    const h = location.pathname + filtersToQuery(f);
+    replaceUrl(h);
   }, [f]);
   if (!cfg) return <NotFound />;
 
@@ -152,12 +152,12 @@ export default function Listing({ kind, collKey, q }) {
   else if (!list.length) {
     gridBody = <div className="grid-empty">{
       cfg.isSearch && !base.length && f.q
-        ? <Empty ic="search" title={t('search.noResults', { q: f.q })} text={t('search.noResultsHint')}><a className="btn btn-primary" href="#/shop/diffusers">{t('search.browseAll')}</a><a className="btn btn-outline" href="#/contact">{t('search.askUs')}</a></Empty>
+        ? <Empty ic="search" title={t('search.noResults', { q: f.q })} text={t('search.noResultsHint')}><a className="btn btn-primary" href="/shop/diffusers">{t('search.browseAll')}</a><a className="btn btn-outline" href="/contact">{t('search.askUs')}</a></Empty>
         : base.length
           ? <Empty ic="filter" title={t('listing.noMatch')} text={t('listing.noMatchHint')}><button className="btn btn-primary" data-action="clear-filters" onClick={() => set({ type: [], space: [], family: [], min: null, max: null, stock: false, sale: false, rating: 0 })}>{t('filter.clear')}</button></Empty>
           : cfg.deals === 'crazy'
-            ? <Empty ic="tag" title={t('deals.noneTitle')} text={t('deals.noneText')}><a className="btn btn-primary" href="#/shop/diffusers">{t('nav.diffusers')}</a><a className="btn btn-outline" href="#/deals/aroma">{t('home.oilsTitle')}</a></Empty>
-            : <Empty ic="box" title={t('listing.noProducts')} text={t('listing.noProductsHint')}><a className="btn btn-primary" href="#/shop/diffusers">{t('search.browseAll')}</a></Empty>
+            ? <Empty ic="tag" title={t('deals.noneTitle')} text={t('deals.noneText')}><a className="btn btn-primary" href="/shop/diffusers">{t('nav.diffusers')}</a><a className="btn btn-outline" href="/deals/aroma">{t('home.oilsTitle')}</a></Empty>
+            : <Empty ic="box" title={t('listing.noProducts')} text={t('listing.noProductsHint')}><a className="btn btn-primary" href="/shop/diffusers">{t('search.browseAll')}</a></Empty>
     }</div>;
   } else {
     const anim = !reducedMotion();
@@ -165,7 +165,7 @@ export default function Listing({ kind, collKey, q }) {
   }
 
   return (<>
-    <Breadcrumbs items={[['#/', t('nav.home')], [null, cfg.crumbs]]} />
+    <Breadcrumbs items={[['/', t('nav.home')], [null, cfg.crumbs]]} />
     <section className={`page-hero${cfg.deals ? ' deals-hero' : ''}`}>
       <div className="container">
         {cfg.deals && <p className="eyebrow"><Icon name={cfg.deals === 'crazy' ? 'flame' : 'tank'} /> {t(cfg.deals === 'aroma' ? 'home.oilsEyebrow' : 'deals.eyebrow')}</p>}

@@ -44,14 +44,12 @@ export default function Footer() {
         <div className="f-brand"><Logo /><p>{t('footer.about')}</p>
           <div className="socials">
             <a href={`https://wa.me/${BRAND.phoneRaw}`} target="_blank" rel="noopener noreferrer" aria-label="WhatsApp"><Icon name="whatsapp" /></a>
-            <a href="https://instagram.com" target="_blank" rel="noopener noreferrer" aria-label="Instagram"><Icon name="instagram" /></a>
-            <a href="https://facebook.com" target="_blank" rel="noopener noreferrer" aria-label="Facebook"><Icon name="facebook" /></a>
-            <a href="https://tiktok.com" target="_blank" rel="noopener noreferrer" aria-label="TikTok"><Icon name="tiktok" /></a>
+            {Object.entries(BRAND.socials).filter(([, url]) => url).map(([k, url]) => <a key={k} href={url} target="_blank" rel="noopener noreferrer" aria-label={k}><Icon name={k} /></a>)}
           </div>
         </div>
-        {col(t('footer.shop'), [['#/shop/diffusers', t('nav.diffusers')], ['#/deals/aroma', t('nav.aromaDeals')], ['#/deals/crazy', t('nav.crazyDeals')], ['#/shop/home-care', t('nav.homeCare')], ['#/shop/gifts', t('nav.gifts')]])}
-        {col(t('footer.customer'), [['#/account', t('nav.account')], ['#/account/orders', t('account.orders')], ['#/wishlist', t('nav.wishlist')], ['#/cart', t('nav.cart')], ['#/account/dates', t('account.dates')]])}
-        {col(t('footer.company'), [['#/about', t('nav.about')], ['#/contact', t('nav.contact')], ['#/policies/shipping', t('policy.shipping')], ['#/policies/returns', t('policy.returns')], ['#/policies/privacy', t('policy.privacy')], ['#/policies/terms', t('policy.terms')]])}
+        {col(t('footer.shop'), [['/shop/diffusers', t('nav.diffusers')], ['/deals/aroma', t('nav.aromaDeals')], ['/deals/crazy', t('nav.crazyDeals')], ['/shop/home-care', t('nav.homeCare')], ['/shop/gifts', t('nav.gifts')]])}
+        {col(t('footer.customer'), [['/account', t('nav.account')], ['/account/orders', t('account.orders')], ['/wishlist', t('nav.wishlist')], ['/cart', t('nav.cart')], ['/account/dates', t('account.dates')]])}
+        {col(t('footer.company'), [['/about', t('nav.about')], ['/contact', t('nav.contact')], ['/policies/shipping', t('policy.shipping')], ['/policies/returns', t('policy.returns')], ['/policies/privacy', t('policy.privacy')], ['/policies/terms', t('policy.terms')]])}
         <div className="f-col f-contact"><h2 className="f-h">{t('footer.contact')}</h2>
           <ul>
             <li><Icon name="phone" /><a href={`tel:${BRAND.phoneRaw}`} dir="ltr">{BRAND.phone}</a></li>
@@ -65,7 +63,7 @@ export default function Footer() {
       <div className="container f-bottom">
         <div className="f-locale"><LocaleControls ctx="f" /></div>
         <PayMarks />
-        <p className="small">© {new Date().getFullYear()} {BRAND.legalName}. {t('footer.rights')}</p>
+        <p className="small">© {new Date().getFullYear()} {BRAND.legalName}. {t('footer.rights')}<br /><span className="muted">{t('footer.legal', { license: BRAND.licenseNo, trn: BRAND.trn })}</span></p>
       </div>
     </footer>
     <a className="wa-float" href={`https://wa.me/${BRAND.phoneRaw}`} target="_blank" rel="noopener noreferrer" aria-label={t('a11y.whatsapp')}><Icon name="whatsapp" /></a>

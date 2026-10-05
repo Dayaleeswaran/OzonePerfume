@@ -7,7 +7,7 @@ import { t } from '../lib/i18n.js';
 import { errorText } from '../lib/format.js';
 import { V } from '../lib/validate.js';
 import { useForm } from '../lib/useForm.js';
-import { navigate, safeNext, useTitle } from '../lib/router.js';
+import { navigate, redirectTo, safeNext, useTitle } from '../lib/router.js';
 
 function AuthShell({ title, sub, children }) {
   const h1 = useRef(null);
@@ -30,7 +30,7 @@ function AuthShell({ title, sub, children }) {
 
 /* Redirect helper for pages that shouldn't show to signed-in users */
 function useRedirect(to) {
-  useEffect(() => { if (to) location.replace(location.href.split('#')[0] + to); }, [to]);
+  useEffect(() => { if (to) redirectTo(to); }, [to]);
   return !!to;
 }
 
@@ -51,7 +51,7 @@ export function Login({ q }) {
   const ui = useUI();
   const f = useForm();
   const [busy, setBusy] = useState(false);
-  const redirecting = useRedirect(S.user() ? (safeNext(q.next) || (S.isAdmin() ? '#/admin' : '#/account')) : null);
+  const redirecting = useRedirect(S.user() ? (safeNext(q.next) || (S.isAdmin() ? '/admin' : '/account')) : null);
   if (redirecting) return null;
   const submit = e => {
     e.preventDefault();
@@ -61,10 +61,10 @@ export function Login({ q }) {
     setBusy(true);
     S.login(d.email, d.password).then(u => {
       ui.toast(t('auth.welcome', { name: u.name || u.email }), 'success');
-      navigate(safeNext(q.next) || (u.role === 'admin' ? '#/admin' : '#/account'));
+      navigate(safeNext(q.next) || (u.role === 'admin' ? '/admin' : '/account'));
     }).catch(err => {
       setBusy(false);
-      if (err.code === 'notConfirmed') { S.resendVerification(d.email).catch(() => {}); navigate('#/verify' + (q.next ? '?next=' + encodeURIComponent(q.next) : '')); return; }
+      if (err.code === 'notConfirmed') { S.resendVerification(d.email).catch(() => {}); navigate('/verify' + (q.next ? '?next=' + encodeURIComponent(q.next) : '')); return; }
       f.setAlert({ type: 'error', msg: errorText(err) }); form.elements.password.value = ''; form.elements.password.focus();
     });
   };
@@ -75,9 +75,9 @@ export function Login({ q }) {
         {f.alert && <Alert className="form-alert">{f.alert.msg}</Alert>}
         <Field name="email" label={t('form.email')} type="email" required autoComplete="email" defaultValue={q.email || ''} error={f.errors.email} onClear={f.clear} />
         <Field name="password" label={t('form.password')} type="password" required autoComplete="current-password" error={f.errors.password} onClear={f.clear} />
-        <div className="row-between"><span /><a href="#/reset" className="small">{t('auth.forgot')}</a></div>
+        <div className="row-between"><span /><a href="/reset" className="small">{t('auth.forgot')}</a></div>
         <Button type="submit" className="btn btn-primary btn-block btn-lg" busy={busy} busyLabel={t('auth.signingIn')}>{t('nav.login')}</Button>
-        <p className="center muted">{t('auth.noAccount')} <a href={`#/register${q.next ? '?next=' + encodeURIComponent(q.next) : ''}`}>{t('auth.createAccount')}</a></p>
+        <p className="center muted">{t('auth.noAccount')} <a href={`/register${q.next ? '?next=' + encodeURIComponent(q.next) : ''}`}>{t('auth.createAccount')}</a></p>
         {import.meta.env.DEV && <details className="demo-note"><summary><Icon name="info" /> {t('auth.demoTitle')}</summary>
           <p>{t('auth.demoCustomer')}: <code>demo@ozonescents.com</code> / <code>Demo@123</code></p>
           <p>{t('auth.demoAdmin')}: <code>admin@ozonescents.com</code> / <code>Admin@123</code></p>
@@ -92,7 +92,7 @@ export function Register({ q }) {
   const f = useForm();
   const [busy, setBusy] = useState(false);
   const [termsErr, setTermsErr] = useState('');
-  const redirecting = useRedirect(S.user() ? '#/account' : null);
+  const redirecting = useRedirect(S.user() ? '/account' : null);
   if (redirecting) return null;
   const submit = e => {
     e.preventDefault();
@@ -105,7 +105,7 @@ export function Register({ q }) {
     S.register({ email: d.email, password: d.password, name: d.name }).then(res => {
       if (d.newsletter) S.subscribe(d.email).catch(() => {});
       ui.toast(t('auth.created'), 'success');
-      navigate(res.needsVerification ? '#/verify' + (q.next ? '?next=' + encodeURIComponent(q.next) : '') : (safeNext(q.next) || '#/account'));
+      navigate(res.needsVerification ? '/verify' + (q.next ? '?next=' + encodeURIComponent(q.next) : '') : (safeNext(q.next) || '/account'));
     }).catch(err => { setBusy(false); f.setAlert({ type: 'error', msg: errorText(err) }); if (err.code === 'exists') form.elements.email.focus(); });
   };
   return (
@@ -116,11 +116,11 @@ export function Register({ q }) {
         <Field name="email" label={t('form.email')} type="email" required autoComplete="email" defaultValue={q.email || ''} error={f.errors.email} onClear={f.clear} />
         <PasswordWithMeter f={f} label={t('form.password')} />
         <Field name="confirm" label={t('form.confirmPassword')} type="password" required autoComplete="new-password" error={f.errors.confirm} onClear={f.clear} />
-        <Check name="terms" onChange={() => termsErr && setTermsErr('')}><span>{t('auth.agree')} <a href="#/policies/terms">{t('policy.terms')}</a> &amp; <a href="#/policies/privacy">{t('policy.privacy')}</a></span></Check>
+        <Check name="terms" onChange={() => termsErr && setTermsErr('')}><span>{t('auth.agree')} <a href="/policies/terms">{t('policy.terms')}</a> &amp; <a href="/policies/privacy">{t('policy.privacy')}</a></span></Check>
         <p className="err" role="alert">{termsErr}</p>
         <Check name="newsletter" label={t('ck.newsletter')} />
         <Button type="submit" className="btn btn-primary btn-block btn-lg" busy={busy} busyLabel={t('auth.creating')}>{t('auth.createAccount')}</Button>
-        <p className="center muted">{t('auth.haveAccount')} <a href={`#/login${q.next ? '?next=' + encodeURIComponent(q.next) : ''}`}>{t('nav.login')}</a></p>
+        <p className="center muted">{t('auth.haveAccount')} <a href={`/login${q.next ? '?next=' + encodeURIComponent(q.next) : ''}`}>{t('nav.login')}</a></p>
       </form>
     </AuthShell>
   );
@@ -133,14 +133,14 @@ export function Verify({ q }) {
   const [resending, setResending] = useState(false);
   const u = S.user();
   const email = (u && u.email) || S.session.pendingEmail;
-  const redirecting = useRedirect(u && u.verified ? (safeNext(q.next) || '#/account') : !email ? '#/login' : null);
+  const redirecting = useRedirect(u && u.verified ? (safeNext(q.next) || '/account') : !email ? '/login' : null);
   if (redirecting) return null;
   const submit = e => {
     e.preventDefault();
     const form = e.currentTarget;
     const d = f.validate(form, { code: [V.required, V.code] }); if (!d) return;
     setBusy(true);
-    S.verify(d.code, email).then(() => { ui.toast(t('auth.verified'), 'success'); navigate(safeNext(q.next) || '#/account'); })
+    S.verify(d.code, email).then(() => { ui.toast(t('auth.verified'), 'success'); navigate(safeNext(q.next) || '/account'); })
       .catch(err => { setBusy(false); f.setErrors({ code: errorText(err) }); form.elements.code.focus(); });
   };
   return (
@@ -151,7 +151,7 @@ export function Verify({ q }) {
         <Button type="submit" className="btn btn-primary btn-block btn-lg" busy={busy} busyLabel={t('auth.verifying')}>{t('auth.verify')}</Button>
         <div className="row-between">
           <Button className="link-btn" busy={resending} onClick={() => { setResending(true); S.resendVerification(email).then(() => { setResending(false); ui.toast(t('auth.resent'), 'info'); }).catch(err => { setResending(false); ui.toast(errorText(err), 'error'); }); }}>{t('auth.resend')}</Button>
-          {u && <a href={safeNext(q.next) || '#/account'} className="small">{t('auth.later')}</a>}
+          {u && <a href={safeNext(q.next) || '/account'} className="small">{t('auth.later')}</a>}
         </div>
       </form>
     </AuthShell>
@@ -185,7 +185,7 @@ export function Reset() {
           {f.alert && <Alert>{f.alert.msg}</Alert>}
           <Field name="email" label={t('form.email')} type="email" required autoComplete="email" error={f.errors.email} onClear={f.clear} />
           <Button type="submit" className="btn btn-primary btn-block btn-lg" busy={busy} busyLabel={t('auth.sending')}>{t('auth.sendCode')}</Button>
-          <p className="center"><a href="#/login">{t('auth.backToLogin')}</a></p>
+          <p className="center"><a href="/login">{t('auth.backToLogin')}</a></p>
         </form>
       )}
       {step.n === 2 && (
@@ -200,7 +200,7 @@ export function Reset() {
       )}
       {step.n === 3 && (
         <div className="done-state"><Icon name="check" className="done-ic" /><h2>{t('auth.resetDone')}</h2><p className="muted">{t('auth.resetDoneText')}</p>
-          <a className="btn btn-primary btn-block" href={`#/login?email=${encodeURIComponent(step.email)}`}>{t('nav.login')}</a></div>
+          <a className="btn btn-primary btn-block" href={`/login?email=${encodeURIComponent(step.email)}`}>{t('nav.login')}</a></div>
       )}
     </AuthShell>
   );

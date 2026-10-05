@@ -46,7 +46,7 @@ export function ProductCard({ p, showSave, gift, style }) {
   return (
     <article className={`pcard${out ? ' is-out' : ''}${style ? ' stagger' : ''}`} data-pid={p.id} style={style}>
       <div className="pcard-media">
-        <a href={`#/product/${p.id}`} className="pcard-img" tabIndex={-1} aria-hidden="true"><Img k={p.img} alt={name} /></a>
+        <a href={`/product/${p.id}`} className="pcard-img" tabIndex={-1} aria-hidden="true"><Img k={p.img} alt={name} /></a>
         <div className="pcard-badges"><Badges p={p} /></div>
         <WishButton p={p} className="pcard-wish" />
         {gift && p.giftable && !out && (
@@ -55,7 +55,7 @@ export function ProductCard({ p, showSave, gift, style }) {
       </div>
       <div className="pcard-body">
         <p className="pcard-type">{t('type.' + p.type)} · {p.sizes.map(s => s.ml.toLocaleString('en')).join(' / ')} ml</p>
-        <h3 className="pcard-name"><a href={`#/product/${p.id}`}>{name}</a></h3>
+        <h3 className="pcard-name"><a href={`/product/${p.id}`}>{name}</a></h3>
         {r.count > 0 && <div className="pcard-rating"><Stars rating={r.avg} /><span>{r.avg.toFixed(1)} <span className="muted">({t('reviews.countShort', { n: r.count })})</span></span></div>}
         <div className="pcard-price">
           {p.compareAt > p.price && <s aria-label={t('price.was')}>{money(p.compareAt)}</s>}
@@ -83,7 +83,7 @@ export function SkeletonCards({ n = 4 }) {
 
 export function MiniCard({ p, onClick }) {
   return (
-    <a className="mini-card" href={`#/product/${p.id}`} onClick={onClick}>
+    <a className="mini-card" href={`/product/${p.id}`} onClick={onClick}>
       <Img k={p.img} />
       <span className="mini-body">
         <span className="mini-type">{t('type.' + p.type)}</span>

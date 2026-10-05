@@ -5,11 +5,13 @@ import { ProductCard, Badges, StockLabel, WishButton } from '../components/Produ
 import { Overlay, Alert, Button, useUI } from '../components/ui.jsx';
 import { S } from '../lib/store.js';
 import { t, pname, ptext, noteLabel } from '../lib/i18n.js';
-import { money, fmtDate, errorText, reducedMotion } from '../lib/format.js';
+import { money, fmtDate, errorText, reducedMotion, imgSrc } from '../lib/format.js';
+import { useSeo, productLd } from '../lib/seo.js';
+import ShippingInfo from '../components/ShippingInfo.jsx';
 import { V } from '../lib/validate.js';
 import { useForm } from '../lib/useForm.js';
 import { useShopActions } from '../lib/useActions.js';
-import { navigate, replaceHash, useTitle } from '../lib/router.js';
+import { navigate, replaceUrl, useTitle } from '../lib/router.js';
 import NotFound from './NotFound.jsx';
 
 const NOTE_ICONS = { top: 'sparkle', heart: 'heart', base: 'leaf' };
@@ -103,7 +105,7 @@ function Reviews({ p }) {
           <p className="muted small">{t('reviews.distNote', { n: written.length })}</p>
         </>}
         {canWrite && <button className="btn btn-primary btn-block" data-action="write-review" onClick={() => setWriting(true)}><Icon name="edit" /> {t('reviews.write')}</button>}
-        {!u && <a className="btn btn-outline btn-block" href={`#/login?next=${encodeURIComponent('/product/' + p.id)}`}>{t('reviews.loginToWrite')}</a>}
+        {!u && <a className="btn btn-outline btn-block" href={`/login?next=${encodeURIComponent('/product/' + p.id)}`}>{t('reviews.loginToWrite')}</a>}
       </div>
       <div className="rev-list-wrap">
         {mine && mine.status === 'pending' && <div className="alert alert-info" tabIndex={-1} ref={noteRef}><Icon name="clock" /><span>{t('reviews.pendingMine')}</span></div>}
@@ -154,6 +156,10 @@ export default function Product({ id, q }) {
   const buyRowRef = useRef(null);
   useTitle(p ? pname(p) : t('pdp.notFound'));
   useEffect(() => { if (p) S.trackRecent(p.id); }, [p]);
+  useSeo(p ? {
+    path: '/product/' + p.id, title: pname(p), description: ptext(p, 'desc') || ptext(p, 'tagline'), image: imgSrc(p.img, 'lg').src,
+    jsonLd: productLd(p, { name: pname(p), description: ptext(p, 'desc') || ptext(p, 'tagline'), image: imgSrc(p.img, 'lg').src, price: S.unitPrice(p, p.sizes[0].id), rating: S.rating(p), inStock: p.stock > 0 })
+  } : { path: '/product/' + id, notFound: true }, [p && p.id, p && p.stock, S.session.lang]);
 
   /* scroll-spy for the section tabs + sticky add-to-cart bar */
   useEffect(() => {
@@ -173,7 +179,7 @@ export default function Product({ id, q }) {
   const set = S.settings();
   const price = S.unitPrice(p, sizeId), compare = S.unitCompare(p, sizeId);
   const off = compare > price ? Math.round((1 - price / compare) * 100) : 0;
-  const coll = p.type === 'oil' ? ['#/deals/aroma', t('nav.aromaDeals')] : p.type === 'hvac' ? ['#/shop/diffusers?type=hvac', t('type.hvac.plural')] : ['#/shop/diffusers', t('nav.diffusers')];
+  const coll = p.type === 'oil' ? ['/deals/aroma', t('nav.aromaDeals')] : p.type === 'hvac' ? ['/shop/diffusers?type=hvac', t('type.hvac.plural')] : ['/shop/diffusers', t('nav.diffusers')];
   const related = S.products().filter(x => x.id !== p.id && (x.type === p.type || (p.family && x.family === p.family))).concat(S.products().filter(x => x.id !== p.id)).filter((x, i, a) => a.indexOf(x) === i).slice(0, 8);
   const tabs = [['desc', t('pdp.tab.desc')], ['details', t('pdp.tab.details')], ['notes', t('pdp.tab.notes')], ['use', t('pdp.tab.use')], ['reviews', t('pdp.tab.reviews')], ['shipping', t('pdp.tab.shipping')]];
   const howTo = p.type === 'oil' ? ['use.oil1', 'use.oil2', 'use.oil3', 'use.oil4'] : p.type === 'hvac' ? ['use.hvac1', 'use.hvac2', 'use.hvac3', 'use.hvac4'] : ['use.s1', 'use.s2', 'use.s3', 'use.s4'];
@@ -200,7 +206,7 @@ export default function Product({ id, q }) {
   };
 
   return (<>
-    <Breadcrumbs items={[['#/', t('nav.home')], coll, [null, name]]} />
+    <Breadcrumbs items={[['/', t('nav.home')], coll, [null, name]]} />
     <section className="container pdp">
       <Gallery p={p} name={name} />
       <div className="pdp-info">
@@ -213,7 +219,7 @@ export default function Product({ id, q }) {
           <div><span className="pb-l">{t('price.price')}</span><strong className="pb-p">{money(price)}</strong></div>
           {compare > price && <><div className="pb-mrp"><span className="pb-l">{t('price.mrp')}</span><s>{money(compare)}</s></div><span className="pb-off">{t('price.off', { n: off })}</span></>}
         </div>
-        <p className="muted small">{t('cart.vatIncl')}{compare > price && <> · <span className="save-txt">{t('price.save', { amount: money(compare - price) })}</span></>}</p>
+        <p className="muted small">{t(set.taxMode === 'exclusive' ? 'cart.vatExcl' : 'cart.vatIncl')}{compare > price && <> · <span className="save-txt">{t('price.save', { amount: money(compare - price) })}</span></>}</p>
         <p className="pdp-tagline">{ptext(p, 'tagline')}</p>
         <ul className="feat-list">{p.features.map(fk => <li key={fk}><Icon name={fk} /><span>{t('feat.' + fk)}</span></li>)}</ul>
 
@@ -222,7 +228,7 @@ export default function Product({ id, q }) {
             <fieldset className="size-pick"><legend>{t('pdp.size')}</legend><div className="size-opts">
               {p.sizes.map(s => (
                 <label key={s.id} className="size-opt">
-                  <input type="radio" name="size" value={s.id} checked={s.id === sizeId} onChange={() => { setSizeId(s.id); replaceHash(`#/product/${p.id}?size=${s.id}`); }} />
+                  <input type="radio" name="size" value={s.id} checked={s.id === sizeId} onChange={() => { setSizeId(s.id); replaceUrl(`/product/${p.id}?size=${s.id}`); }} />
                   <span><strong>{t('size.ml', { n: s.ml })}</strong><small>{money(p.price + s.delta)}</small></span>
                 </label>
               ))}
@@ -236,10 +242,10 @@ export default function Product({ id, q }) {
             <button type="button" className="icon-btn sq" onClick={share} aria-label={t('pdp.share')}><Icon name="share" /></button>
           </div>
           <div className="buy-row2">
-            <Button className="btn btn-primary btn-lg" data-action="buy-now" busy={busy === 'buy'} busyLabel={t('cart.adding')} disabled={out} onClick={() => add('buy', () => navigate('#/checkout'))}>{t('pdp.buyNow')} <Icon name="arrowRight" className="flip" /></Button>
+            <Button className="btn btn-primary btn-lg" data-action="buy-now" busy={busy === 'buy'} busyLabel={t('cart.adding')} disabled={out} onClick={() => add('buy', () => navigate('/checkout'))}>{t('pdp.buyNow')} <Icon name="arrowRight" className="flip" /></Button>
             {p.giftable && <button type="button" className="btn btn-outline btn-lg" data-action="gift-pdp" disabled={out} onClick={() => openGift({ productId: p.id, sizeId, qty })}><Icon name="gift" /> {t('gift.send')}</button>}
           </div>
-          {out && <div className="alert alert-info"><Icon name="info" /><span>{t('pdp.outNote')} <a href="#/contact">{t('pdp.contactUs')}</a></span></div>}
+          {out && <div className="alert alert-info"><Icon name="info" /><span>{t('pdp.outNote')} <a href="/contact">{t('pdp.contactUs')}</a></span></div>}
         </form>
 
         <ul className="assure">
@@ -269,19 +275,15 @@ export default function Product({ id, q }) {
             <div key={lvl} className={`pyr pyr-${lvl} reveal`} style={{ '--d': `${i * 100}ms` }}><span className="pyr-ic"><Icon name={NOTE_ICONS[lvl]} /></span>
               <div><h3>{t('notes.' + lvl)}</h3><p className="muted small">{t('notes.' + lvl + '.d')}</p><ul className="note-chips">{p.notes[lvl].map(n => <li key={n}>{noteLabel(n)}</li>)}</ul></div></div>
           ))}</div>
-        </>) : <div className="alert alert-info"><Icon name="info" /><span>{t(p.type === 'oil' ? 'pdp.notesPending' : 'pdp.notesDiffuser')} <a href={p.type === 'oil' ? '#/contact' : '#/deals/aroma'}>{p.type === 'oil' ? t('pdp.contactUs') : t('home.oilsTitle')}</a></span></div>}
+        </>) : <div className="alert alert-info"><Icon name="info" /><span>{t(p.type === 'oil' ? 'pdp.notesPending' : 'pdp.notesDiffuser')} <a href={p.type === 'oil' ? '/contact' : '/deals/aroma'}>{p.type === 'oil' ? t('pdp.contactUs') : t('home.oilsTitle')}</a></span></div>}
       </section>
       <section id="use" className="pdp-sec" aria-labelledby="h-use"><h2 id="h-use">{t('pdp.tab.use')}</h2>
         <ol className="steps">{howTo.map((k, i) => <li key={k}><span className="step-n">{i + 1}</span><div><h3>{t(k + '.t')}</h3><p>{t(k + '.d')}</p></div></li>)}</ol>
       </section>
       <section id="reviews" className="pdp-sec" aria-labelledby="h-reviews"><h2 id="h-reviews">{t('pdp.tab.reviews')}</h2><Reviews p={p} /></section>
       <section id="shipping" className="pdp-sec" aria-labelledby="h-shipping"><h2 id="h-shipping">{t('pdp.tab.shipping')}</h2>
-        <div className="ship-grid">
-          <div><Icon name="truck" /><h3>{t('ship.standard')}</h3><p>{t('ship.standardD', { fee: money(set.shippingFee), amount: money(set.freeShippingThreshold) })}</p></div>
-          <div><Icon name="clock" /><h3>{t('ship.express')}</h3><p>{t('ship.expressD', { fee: money(set.expressFee) })}</p></div>
-          <div><Icon name="refresh" /><h3>{t('policy.returns')}</h3><p>{t('ship.returnsD')}</p></div>
-        </div>
-        <a className="link-arrow" href="#/policies/shipping">{t('ship.full')} <Icon name="arrowRight" className="flip" /></a>
+        <ShippingInfo />
+        <a className="link-arrow" href="/policies/shipping">{t('ship.full')} <Icon name="arrowRight" className="flip" /></a>
       </section>
     </div>
 
