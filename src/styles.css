@@ -618,7 +618,7 @@ body.mode-bare .toasts { bottom: 24px; }
 [lang="ar"] .b-t { font-family: var(--f-ar); font-size: 1.1rem; font-weight: 700; }
 .b-s { margin: 2px 0 0; font-size: .85rem; color: rgba(255, 255, 255, .72); }
 
-.tiles-sec { padding-top: 0; }
+.tiles-sec { padding-top: 0; padding-bottom: clamp(32px, 4vw, 56px); }
 .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; }
 .tile { position: relative; display: block; aspect-ratio: 1; border-radius: var(--r); overflow: hidden; color: #fff; text-decoration: none; isolation: isolate; }
 .tile img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transition: transform 1.2s var(--ease); z-index: -2; }
@@ -708,8 +708,9 @@ body.mode-bare .toasts { bottom: 24px; }
 .c-act small { color: rgba(255, 255, 255, .75); }
 
 /* ---------- cinematic ---------- */
-.cine { background: linear-gradient(180deg, var(--bg) 0, var(--light) 90px, var(--navy) 420px); color: #fff; }
-.cine-intro { text-align: center; padding-block: clamp(56px, 8vw, 96px) clamp(28px, 4vw, 40px); display: flex; flex-direction: column; align-items: center; }
+/* Short fade into the dark stage: the background is fully dark before the heading starts, so the light text is always readable */
+.cine { background: linear-gradient(180deg, var(--bg) 0, var(--navy) 120px); color: #fff; }
+.cine-intro { text-align: center; padding-block: clamp(150px, 14vw, 176px) clamp(28px, 4vw, 40px); display: flex; flex-direction: column; align-items: center; }
 .cine-intro .eyebrow { color: var(--steal); }
 .cine-intro .sec-title { color: #fff; }
 .cine-intro .sec-sub { color: rgba(255, 255, 255, .78); }
