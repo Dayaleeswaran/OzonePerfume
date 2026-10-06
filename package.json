@@ -11,7 +11,8 @@
     "test:unit": "node --test tests/unit/*.test.mjs",
     "test:db": "node --test --test-concurrency=1 tests/integration/*.test.mjs",
     "test:e2e": "node tests/e2e/critical.e2e.mjs",
-    "seed:gen": "node supabase/gen_seed.mjs"
+    "seed:gen": "node supabase/gen_seed.mjs",
+    "test:smoke": "node scripts/smoke.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.2",
