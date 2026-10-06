@@ -1672,3 +1672,9 @@ body.mode-bare[data-route="admin"] { background: var(--bg-soft); }
 /* Stripe hosted payment */
 .stripe-info p { margin: 0 0 8px; }
 .pay-confirming { display: flex; align-items: center; gap: 10px; }
+
+/* one-time code expiry countdown */
+.code-timer { display: inline-flex; align-items: center; gap: 8px; margin: 4px 0 10px; font-size: .92rem; color: var(--ink-2, #4a463f); font-variant-numeric: tabular-nums; }
+.code-timer .ic { width: 16px; height: 16px; }
+.code-timer.soon { color: #B42318; font-weight: 600; }
+.code-field input:disabled { opacity: .55; cursor: not-allowed; }

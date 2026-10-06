@@ -328,6 +328,12 @@ Object.assign(ar, {
 
 /* Production requirements update */
 Object.assign(ar, {
+  "auth.codeExpiresIn": "تنتهي صلاحية هذا الرمز خلال {time}",
+  "auth.codeExpired": "انتهت صلاحية هذا الرمز. اطلب رمزاً جديداً للمتابعة.",
+  "auth.resendIn": "يمكن طلب رمز جديد بعد {n} ثانية",
+  "auth.sendNewCode": "إرسال رمز جديد",
+  "auth.verifySub": "أدخل الرمز الذي أرسلناه إلى بريدك لتأكيد حسابك.",
+  "val.code": "أدخل الرمز الموجود في الرسالة (أرقام فقط).",
   "auth.verifyLink": "إذا وصلك رابط «تأكيد البريد الإلكتروني» بدلاً من رمز، فاضغط عليه ثم",
   "auth.verifyLinkLogin": "سجّل الدخول هنا",
   "captcha.wait": "يُرجى الانتظار لحظة ريثما نتحقق من أنك لست روبوتاً، ثم حاول مرة أخرى.",

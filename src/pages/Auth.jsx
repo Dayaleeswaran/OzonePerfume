@@ -134,34 +134,75 @@ export function Register({ q }) {
   );
 }
 
+/* ---------- one-time code expiry ----------
+   The email code is valid for OTP_MINUTES (the server enforces it: Supabase → Authentication → Email → "Email OTP
+   Expiration" must be set to the same value in seconds). The page shows a countdown; when it reaches zero the code
+   can no longer be submitted and the customer has to request a new one. */
+const OTP_MINUTES = Number(import.meta.env.VITE_OTP_MINUTES) || 2;
+const RESEND_WAIT = 60;                      // seconds between code emails (matches the server's minimum interval)
+const mmss = s => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+
+function useNow(active = true) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!active) return undefined;
+    const h = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(h);
+  }, [active]);
+  return now;
+}
+/* sentAt = when the latest code was emailed (ms); no timestamp means we can't vouch for a code → treat as expired */
+function codeState(sentAt, now) {
+  const left = sentAt ? Math.max(0, Math.ceil((sentAt + OTP_MINUTES * 60000 - now) / 1000)) : 0;
+  const wait = sentAt ? Math.max(0, Math.ceil((sentAt + RESEND_WAIT * 1000 - now) / 1000)) : 0;
+  return { left, expired: left === 0, wait };
+}
+function CodeTimer({ st }) {
+  if (st.expired) return <Alert icon="clock" className="code-expired">{t('auth.codeExpired')}</Alert>;
+  return <p className={`code-timer${st.left <= 60 ? ' soon' : ''}`} role="timer" data-code-timer><Icon name="clock" /> {t('auth.codeExpiresIn', { time: mmss(st.left) })}</p>;
+}
+
 export function Verify({ q }) {
   const ui = useUI();
   const f = useForm();
   const [busy, setBusy] = useState(false);
   const [resending, setResending] = useState(false);
   const cap = useCaptcha('resend');
+  const now = useNow();
   const u = S.user();
   const email = (u && u.email) || S.session.pendingEmail;
   const redirecting = useRedirect(u && u.verified ? (safeNext(q.next) || '/account') : !email ? '/login' : null);
   if (redirecting) return null;
+  const st = codeState(S.session.codeSentAt, now);
   const submit = e => {
     e.preventDefault();
     const form = e.currentTarget;
+    if (st.expired) { f.setErrors({ code: t('auth.codeExpired') }); return; }
     const d = f.validate(form, { code: [V.required, V.code] }); if (!d) return;
     setBusy(true);
     S.verify(d.code, email).then(() => { ui.toast(t('auth.verified'), 'success'); navigate(safeNext(q.next) || '/account'); })
       .catch(err => { setBusy(false); f.setErrors({ code: errorText(err) }); form.elements.code.focus(); });
   };
+  const resend = () => {
+    if (st.wait > 0) return;
+    if (!cap.ready()) { ui.toast(t('captcha.wait'), 'info'); return; }
+    setResending(true);
+    const token = cap.token; cap.reset();
+    S.resendVerification(email, token).then(() => { setResending(false); f.clear('code'); ui.toast(t('auth.resent'), 'info'); })
+      .catch(err => { setResending(false); ui.toast(errorText(err), 'error'); });
+  };
+  const resendLabel = st.wait > 0 ? t('auth.resendIn', { n: st.wait }) : t(st.expired ? 'auth.sendNewCode' : 'auth.resend');
   return (
     <AuthShell title={t('auth.verifyTitle')} sub={t('auth.verifySub')}>
       <form data-verify noValidate onSubmit={submit}>
         <Alert type="info" icon="mail">{t('auth.verifySent', { email })}<br /><small>{t('auth.checkSpam')}</small></Alert>
-        {/* until the 6-digit code template is active, the email may contain a link instead */}
-        <p className="muted small">{t('auth.verifyLink')} <a href={`/login?email=${encodeURIComponent(email || '')}${q.next ? '&next=' + encodeURIComponent(q.next) : ''}`}>{t('auth.verifyLinkLogin')}</a></p>
-        <Field name="code" label={t('auth.code')} required autoComplete="one-time-code" inputMode="numeric" maxLength={6} dir="ltr" className="code-field" error={f.errors.code} onClear={f.clear} />
-        <Button type="submit" className="btn btn-primary btn-block btn-lg" busy={busy} busyLabel={t('auth.verifying')}>{t('auth.verify')}</Button>
+        <CodeTimer st={st} />
+        <Field name="code" label={t('auth.code')} required autoComplete="one-time-code" inputMode="numeric" maxLength={10} dir="ltr" className="code-field" disabled={st.expired} error={f.errors.code} onClear={f.clear} />
+        {st.expired
+          ? <Button className="btn btn-primary btn-block btn-lg" busy={resending} disabled={st.wait > 0} onClick={resend} data-resend>{resendLabel}</Button>
+          : <Button type="submit" className="btn btn-primary btn-block btn-lg" busy={busy} busyLabel={t('auth.verifying')}>{t('auth.verify')}</Button>}
         <div className="row-between">
-          <Button className="link-btn" busy={resending} onClick={() => { if (!cap.ready()) { ui.toast(t('captcha.wait'), 'info'); return; } setResending(true); const token = cap.token; cap.reset(); S.resendVerification(email, token).then(() => { setResending(false); ui.toast(t('auth.resent'), 'info'); }).catch(err => { setResending(false); ui.toast(errorText(err), 'error'); }); }}>{t('auth.resend')}</Button>
+          {!st.expired ? <Button className="link-btn" busy={resending} disabled={st.wait > 0} onClick={resend} data-resend>{resendLabel}</Button> : <span />}
           {u && <a href={safeNext(q.next) || '/account'} className="small">{t('auth.later')}</a>}
         </div>
         {cap.widget}
@@ -175,24 +216,37 @@ export function Reset() {
   const ui = useUI();
   const [step, setStep] = useState({ n: 1 });
   const [busy, setBusy] = useState(false);
+  const [resending, setResending] = useState(false);
   const cap = useCaptcha('reset');
+  const now = useNow(step.n === 2);
+  const st = codeState(step.sentAt, now);
   const request = e => {
     e.preventDefault();
     const d = f.validate(e.currentTarget, { email: [V.required, V.email] }); if (!d) return;
     if (!cap.ready()) { f.setAlert({ type: 'error', msg: t('captcha.wait') }); return; }
     setBusy(true);
     const token = cap.token; cap.reset();
-    S.requestReset(d.email, token).then(() => { setBusy(false); setStep({ n: 2, email: d.email }); })
+    S.requestReset(d.email, token).then(() => { setBusy(false); setStep({ n: 2, email: d.email, sentAt: Date.now() }); })
       .catch(err => { setBusy(false); f.setAlert({ type: 'error', msg: errorText(err) }); });
+  };
+  const resend = () => {
+    if (st.wait > 0) return;
+    if (!cap.ready()) { ui.toast(t('captcha.wait'), 'info'); return; }
+    setResending(true);
+    const token = cap.token; cap.reset();
+    S.requestReset(step.email, token).then(() => { setResending(false); f.clear('code'); setStep({ n: 2, email: step.email, sentAt: Date.now() }); ui.toast(t('auth.resent'), 'info'); })
+      .catch(err => { setResending(false); ui.toast(errorText(err), 'error'); });
   };
   const confirm = e => {
     e.preventDefault();
     const form = e.currentTarget;
+    if (st.expired) { f.setErrors({ code: t('auth.codeExpired') }); return; }
     const d = f.validate(form, { code: [V.required, V.code], password: [V.required, V.password], confirm: [V.required, (v, all) => v === all.password ? '' : t('val.match')] }); if (!d) return;
     setBusy(true);
     S.resetPassword(step.email, d.code, d.password).then(() => { setBusy(false); setStep({ n: 3, email: step.email }); ui.announce(t('auth.resetDone')); })
       .catch(err => { setBusy(false); f.setErrors({ code: errorText(err) }); form.elements.code.focus(); });
   };
+  const resendLabel = st.wait > 0 ? t('auth.resendIn', { n: st.wait }) : t(st.expired ? 'auth.sendNewCode' : 'auth.resend');
   return (
     <AuthShell title={t('auth.resetTitle')} sub={t('auth.resetSub')}>
       {step.n === 1 && (
@@ -205,12 +259,17 @@ export function Reset() {
         </form>
       )}
       {step.n === 2 && (
-        <form noValidate onSubmit={confirm}>
+        <form noValidate onSubmit={confirm} data-reset-code>
           <Alert type="success" icon="mail">{t('auth.resetSent', { email: step.email })}<br /><small>{t('auth.checkSpam')}</small></Alert>
-          <Field name="code" label={t('auth.code')} required autoComplete="one-time-code" inputMode="numeric" maxLength={6} dir="ltr" className="code-field" error={f.errors.code} onClear={f.clear} autoFocus />
-          <PasswordWithMeter f={f} label={t('auth.newPassword')} />
-          <Field name="confirm" label={t('form.confirmPassword')} type="password" required autoComplete="new-password" error={f.errors.confirm} onClear={f.clear} />
-          <Button type="submit" className="btn btn-primary btn-block btn-lg" busy={busy} busyLabel={t('common.saving')}>{t('auth.resetBtn')}</Button>
+          <CodeTimer st={st} />
+          <Field name="code" label={t('auth.code')} required autoComplete="one-time-code" inputMode="numeric" maxLength={10} dir="ltr" className="code-field" disabled={st.expired} error={f.errors.code} onClear={f.clear} autoFocus />
+          {!st.expired && <>
+            <PasswordWithMeter f={f} label={t('auth.newPassword')} />
+            <Field name="confirm" label={t('form.confirmPassword')} type="password" required autoComplete="new-password" error={f.errors.confirm} onClear={f.clear} />
+            <Button type="submit" className="btn btn-primary btn-block btn-lg" busy={busy} busyLabel={t('common.saving')}>{t('auth.resetBtn')}</Button>
+          </>}
+          <Button className={st.expired ? 'btn btn-primary btn-block btn-lg' : 'link-btn'} busy={resending} disabled={st.wait > 0} onClick={resend} data-resend>{resendLabel}</Button>
+          {cap.widget}
           <p className="center"><button type="button" className="link-btn" onClick={() => setStep({ n: 1 })}>{t('auth.useOtherEmail')}</button></p>
         </form>
       )}

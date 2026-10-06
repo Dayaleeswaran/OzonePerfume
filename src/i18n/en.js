@@ -328,6 +328,12 @@ Object.assign(en, {
 
 /* Production requirements update */
 Object.assign(en, {
+  "auth.codeExpiresIn": "This code expires in {time}",
+  "auth.codeExpired": "This code has expired. Request a new code to continue.",
+  "auth.resendIn": "New code available in {n}s",
+  "auth.sendNewCode": "Send a new code",
+  "auth.verifySub": "Enter the code we emailed you to confirm your account.",
+  "val.code": "Enter the code from the email (numbers only).",
   "auth.verifyLink": "If your email has a “Confirm email address” link instead of a code, click it, then",
   "auth.verifyLinkLogin": "log in here",
   "captcha.wait": "Please wait a moment while we check you’re not a robot, then try again.",

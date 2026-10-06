@@ -8,7 +8,8 @@ export const V = {
   phone: v => !String(v || '').trim() || /^[+\d][\d\s()-]{6,}$/.test(String(v).trim()) ? '' : t('val.phone'),
   min: n => v => String(v || '').trim().length >= n ? '' : t('val.min', { n }),
   max: n => v => String(v || '').length <= n ? '' : t('val.max', { n }),
-  code: v => /^\d{6}$/.test(String(v || '').trim()) ? '' : t('val.code')
+  /* email one-time code: 6 digits locally, 8 on Supabase cloud by default — accept whatever length the server sends */
+  code: v => /^\d{6,10}$/.test(String(v || '').replace(/\s/g, '')) ? '' : t('val.code')
 };
 
 /* rules: { field: [validator, ...] } → { errors, ok } */

@@ -279,13 +279,13 @@ export const S = {
     const data = await run(supabase.auth.signUp({ email, password, options: { data: { full_name: name.trim().slice(0, 100) }, captchaToken: captchaToken || undefined } }));
     /* Supabase returns a user with no identities when the email is already registered (anti-enumeration) */
     if (data.user && data.user.identities && data.user.identities.length === 0) throw { code: 'exists' };
-    session.pendingEmail = email; session.pendingNewsletter = !!newsletter; commit('auth');
+    session.pendingEmail = email; session.pendingNewsletter = !!newsletter; session.codeSentAt = Date.now(); commit('auth');
     return { needsVerification: !data.session };
   },
   async verify(code, email = session.pendingEmail) {
     if (!email) throw { code: 'auth' };
-    await run(supabase.auth.verifyOtp({ email, token: String(code).trim(), type: 'signup' }));
-    session.pendingEmail = null;
+    await run(supabase.auth.verifyOtp({ email, token: String(code).replace(/s/g, ''), type: 'signup' }));
+    session.pendingEmail = null; session.codeSentAt = null;
     const { data } = await supabase.auth.getUser();
     await setAuth(data.user); commit('auth');
     /* newsletter ticked at sign-up: join now that the customer is signed in (no second CAPTCHA needed) */
@@ -294,6 +294,7 @@ export const S = {
   async resendVerification(email = session.pendingEmail || (cache.auth && cache.auth.email), captchaToken) {
     if (!email) throw { code: 'auth' };
     await run(supabase.auth.resend({ type: 'signup', email, options: { captchaToken: captchaToken || undefined } }));
+    session.codeSentAt = Date.now(); commit('auth');     // restarts the expiry countdown on the verify page
   },
   async login(email, password, captchaToken) {
     email = email.trim().toLowerCase();
@@ -313,7 +314,7 @@ export const S = {
     return {};
   },
   async resetPassword(email, code, password) {
-    await run(supabase.auth.verifyOtp({ email: email.trim().toLowerCase(), token: String(code).trim(), type: 'recovery' }));
+    await run(supabase.auth.verifyOtp({ email: email.trim().toLowerCase(), token: String(code).replace(/s/g, ''), type: 'recovery' }));
     await run(supabase.auth.updateUser({ password }));
     await supabase.auth.signOut(); await setAuth(null); commit('auth');
   },

@@ -328,6 +328,12 @@ Object.assign(es, {
 
 /* Production requirements update */
 Object.assign(es, {
+  "auth.codeExpiresIn": "Este código caduca en {time}",
+  "auth.codeExpired": "Este código ha caducado. Solicita uno nuevo para continuar.",
+  "auth.resendIn": "Nuevo código disponible en {n} s",
+  "auth.sendNewCode": "Enviar un código nuevo",
+  "auth.verifySub": "Introduce el código que te enviamos por correo para confirmar tu cuenta.",
+  "val.code": "Introduce el código del correo (solo números).",
   "auth.verifyLink": "Si tu correo trae un enlace “Confirmar dirección de correo” en lugar de un código, haz clic en él y luego",
   "auth.verifyLinkLogin": "inicia sesión aquí",
   "captcha.wait": "Espera un momento mientras comprobamos que no eres un robot y vuelve a intentarlo.",
